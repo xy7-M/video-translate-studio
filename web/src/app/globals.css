@@ -38,6 +38,11 @@ body {
   border-radius: 12px;
 }
 
+/* 拖拽上传区：覆盖 .panel 的实线，恢复虚线 */
+.panel.dashed {
+  border-style: dashed;
+}
+
 .glow-border {
   border: 1px solid var(--line-2);
   box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.06), 0 8px 40px rgba(2, 6, 18, 0.6);

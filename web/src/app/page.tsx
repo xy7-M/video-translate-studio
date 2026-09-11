@@ -145,7 +145,7 @@ export default function Home() {
       {/* Upload zone */}
       {!task && (
         <div
-          className={`panel glow-border border-dashed p-14 text-center cursor-pointer transition-colors duration-150 ${
+          className={`panel dashed glow-border p-14 text-center cursor-pointer transition-colors duration-150 ${
             drag ? "border-[var(--accent)] bg-[rgba(56,189,248,0.05)]" : ""
           }`}
           onClick={() => inputRef.current?.click()}
