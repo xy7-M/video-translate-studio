@@ -10,6 +10,12 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   if (t.status !== "ready" && t.status !== "done") {
     return NextResponse.json({ error: "当前状态不可烧录" }, { status: 409 });
   }
-  void burnSubtitles(t.id);
+  void burnSubtitles(t.id).catch((e) =>
+    updateTask(t.id, {
+      status: "error",
+      error: e instanceof Error ? e.message : String(e),
+      message: "烧录失败",
+    })
+  );
   return NextResponse.json({ ok: true });
 }
