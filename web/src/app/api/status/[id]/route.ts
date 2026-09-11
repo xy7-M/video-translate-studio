@@ -15,5 +15,9 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     encoder: t.encoder,
     segments: t.segments,
     hasVideo: !!t.burnedFile,
+    title: t.title,
+    course: t.course,
+    summary: t.summary,
+    glossary: t.glossary,
   });
 }

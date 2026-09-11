@@ -1,8 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Library from "@/components/Library";
 
 type Segment = { start: number; end: number; text: string; zh?: string };
+type Summary = { points: string[]; emphasis: string[]; actions: string[] };
+type GlossaryItem = { en: string; zh: string; note?: string };
 type Task = {
   id: string;
   status: string;
@@ -12,9 +15,13 @@ type Task = {
   encoder?: string;
   segments?: Segment[];
   hasVideo?: boolean;
+  title?: string;
+  course?: string;
+  summary?: Summary;
+  glossary?: GlossaryItem[];
 };
 
-const STEPS = ["上传", "抽取音轨", "英文转写", "中文翻译", "双语字幕"];
+const STEPS = ["上传", "抽取音轨", "英文转写", "中文翻译", "AI 课堂笔记", "双语字幕"];
 
 function fmt(sec: number) {
   const m = Math.floor(sec / 60);
@@ -23,6 +30,7 @@ function fmt(sec: number) {
 }
 
 export default function Home() {
+  const [view, setView] = useState<"work" | "library">("work");
   const [task, setTask] = useState<Task | null>(null);
   const [drag, setDrag] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -39,7 +47,8 @@ export default function Home() {
       case "extracting": return 1;
       case "transcribing": return 2;
       case "translating": return 3;
-      case "ready": case "burning": case "done": return 4;
+      case "analyzing": return 4;
+      case "ready": case "burning": case "done": return 5;
       default: return -1;
     }
   })();
@@ -128,6 +137,41 @@ export default function Home() {
     }, 2000);
   };
 
+  /** 从课程库打开历史任务 */
+  const openTask = async (id: string) => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    try {
+      const r = await fetch(`/api/status/${id}`);
+      const t: Task = await r.json();
+      if (!r.ok) return;
+      editedRef.current = false;
+      setTask(t);
+      setSegs(t.segments || []);
+      setView("work");
+      if (!["ready", "error", "done"].includes(t.status)) poll(id);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const saveCourse = async (course: string) => {
+    if (!task) return;
+    setTask((p) => p && { ...p, course: course.trim() });
+    await fetch("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: task.id, course }),
+    }).catch(() => {});
+  };
+
+  const downloadNotes = (fmt: "md" | "html") => {
+    if (!task) return;
+    const a = document.createElement("a");
+    a.href = `/api/notes/${task.id}?fmt=${fmt}`;
+    a.download = `notes-${task.title || task.id}.${fmt}`;
+    a.click();
+  };
+
   return (
     <main className="max-w-5xl mx-auto px-6 py-10">
       {/* Header */}
@@ -137,13 +181,33 @@ export default function Home() {
             <span className="text-[var(--accent)] mono">&gt;_</span> 视频快译
           </h1>
           <p className="text-[var(--muted)] mt-2">
-            英文视频导入 → 自动生成 <span className="text-[var(--text)]">中英双语字幕</span>
+            英文课堂视频 → <span className="text-[var(--text)]">双语字幕 · AI 笔记 · 复习词表</span>
           </p>
         </div>
-        <div className="mono text-xs text-[var(--muted)] hidden sm:block">
-          faster-whisper · DeepSeek · ffmpeg
-        </div>
+        <nav className="flex items-center gap-2">
+          <button
+            onClick={() => setView("work")}
+            className={`px-5 py-2 rounded-full text-sm transition-all duration-200 ${
+              view === "work" ? "bg-[var(--accent)] text-white" : "text-[var(--muted)] hover:text-[var(--text)]"
+            }`}
+          >
+            工作台
+          </button>
+          <button
+            onClick={() => setView("library")}
+            className={`px-5 py-2 rounded-full text-sm transition-all duration-200 ${
+              view === "library" ? "bg-[var(--accent)] text-white" : "text-[var(--muted)] hover:text-[var(--text)]"
+            }`}
+          >
+            课程库
+          </button>
+        </nav>
       </header>
+
+      {view === "library" && <Library onOpen={openTask} />}
+
+      {view === "work" && (
+      <>
 
       {/* Upload zone */}
       {!task && (
@@ -240,10 +304,22 @@ export default function Home() {
             {/* Actions */}
             <div className="panel p-6 flex flex-col gap-5">
               <div>
-                <p className="font-medium">双语字幕已生成 ✓</p>
+                <p className="font-medium">{task.title || "本视频"} · 双语字幕已生成 ✓</p>
                 <p className="text-sm text-[var(--muted)] mt-1">
                   共 {segs.length} 句 · 可直接编辑下方文字，导出时以编辑内容为准
                 </p>
+              </div>
+
+              {/* 课程归类 */}
+              <div>
+                <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest mb-2">归入课程频道</p>
+                <input
+                  placeholder="如：Math101 / CS210 / 经济学原理…"
+                  defaultValue={task.course || ""}
+                  onBlur={(e) => saveCourse(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+                  className="w-full bg-transparent border border-[var(--line)] rounded-full px-4 py-2 text-sm outline-none focus:border-[var(--accent)] transition-colors duration-150"
+                />
               </div>
 
               {/* 导出 + 烧录 */}
@@ -252,6 +328,12 @@ export default function Home() {
                 <div className="flex flex-wrap gap-3">
                   <button className="btn-primary" onClick={downloadSrt}>
                     ⬇ 下载双语 SRT
+                  </button>
+                  <button className="btn-ghost" onClick={() => downloadNotes("md")}>
+                    📝 复习笔记 MD
+                  </button>
+                  <button className="btn-ghost" onClick={() => downloadNotes("html")}>
+                    🖨 笔记 HTML·PDF
                   </button>
                   <button
                     className="btn-ghost"
@@ -282,6 +364,64 @@ export default function Home() {
             </div>
           </div>
 
+          {/* AI 课堂笔记 + 专业词表 */}
+          {(task.summary || task.glossary) && (
+            <div className="grid md:grid-cols-2 gap-6">
+              {task.summary && (task.summary.points.length || task.summary.emphasis.length || task.summary.actions.length) > 0 && (
+                <div className="panel p-6 space-y-5">
+                  <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest">AI 课堂摘要</p>
+                  {task.summary.points.length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium mb-2">本节课要点</p>
+                      <ul className="space-y-1.5 text-sm text-[var(--muted)] list-disc pl-5 marker:text-[var(--accent)]">
+                        {task.summary.points.map((p, i) => <li key={i}>{p}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  {task.summary.emphasis.length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium mb-2" style={{ color: "var(--warn)" }}>⚠️ 教授强调 / 疑似考点</p>
+                      <ul className="space-y-1.5 text-sm text-[var(--muted)] list-disc pl-5 marker:text-[var(--warn)]">
+                        {task.summary.emphasis.map((p, i) => <li key={i}>{p}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  {task.summary.actions.length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium mb-2" style={{ color: "var(--ok)" }}>✅ 待办事项</p>
+                      <ul className="space-y-1.5 text-sm text-[var(--muted)]">
+                        {task.summary.actions.map((p, i) => (
+                          <li key={i} className="flex gap-2">
+                            <span style={{ color: "var(--ok)" }}>☐</span>
+                            <span>{p}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+              {task.glossary && task.glossary.length > 0 && (
+                <div className="panel p-6">
+                  <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest mb-4">
+                    专业词表 · {task.glossary.length} 个术语
+                  </p>
+                  <div className="max-h-[340px] overflow-y-auto divide-y divide-[var(--line)]">
+                    {task.glossary.map((g, i) => (
+                      <div key={i} className="py-3 flex flex-col gap-0.5">
+                        <p className="text-sm">
+                          <span className="mono text-[var(--accent)]">{g.en}</span>
+                          <span className="text-[var(--text)] ml-3">{g.zh}</span>
+                        </p>
+                        {g.note && <p className="text-xs text-[var(--muted)]">{g.note}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Bilingual table */}
           <div className="panel overflow-hidden">
             <div className="grid grid-cols-[70px_1fr_1fr] bg-[var(--bg-2)] text-xs mono text-[var(--muted)] uppercase">
@@ -310,6 +450,8 @@ export default function Home() {
             </div>
           </div>
         </div>
+      )}
+      </>
       )}
 
       <footer className="mt-16 text-center text-xs text-[var(--muted)] mono">

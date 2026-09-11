@@ -25,7 +25,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "文件超过 2GB（约等于 2 小时 720p）" }, { status: 400 });
   }
 
-  const task = newTask("");
+  const task = newTask("", path.basename(file.name, ext));
   const dest = path.join(UPLOAD_DIR, `${task.id}${ext}`);
 
   // 流式写盘：大文件不占内存

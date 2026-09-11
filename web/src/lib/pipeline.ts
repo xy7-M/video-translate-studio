@@ -2,14 +2,26 @@ import { spawn } from "child_process";
 import { randomUUID } from "crypto";
 import fs from "fs";
 import path from "path";
+import { deepseekJson } from "./deepseek";
 
 export type Segment = { start: number; end: number; text: string; zh?: string };
+
+/** AI 课堂摘要：要点 / 教授强调 / 待办行动项 */
+export type Summary = {
+  points: string[]; // 本节课核心要点
+  emphasis: string[]; // 教授反复强调 / 疑似考点
+  actions: string[]; // 作业、deadline、待办
+};
+
+/** 专业词表条目（中英对照 + 释义） */
+export type GlossaryItem = { en: string; zh: string; note?: string };
 
 export type TaskStatus =
   | "queued"
   | "extracting"
   | "transcribing"
   | "translating"
+  | "analyzing"
   | "ready"
   | "burning"
   | "done"
@@ -28,6 +40,12 @@ export type Task = {
   encoder?: string; // h264_nvenc / libx264
   error?: string;
   createdAt: number;
+  // —— 学习增强字段（借鉴 Otter / Notta）——
+  title?: string; // 视频文件名（去扩展名）
+  course?: string; // 所属课程频道（Channels）
+  duration?: number; // 视频时长（秒）
+  summary?: Summary; // AI 课堂摘要 + 行动项
+  glossary?: GlossaryItem[]; // 专业词表
 };
 
 const ROOT = path.resolve(process.cwd(), "..");
@@ -45,17 +63,33 @@ function taskPath(id: string) {
   return path.join(TASK_DIR, `${id}.json`);
 }
 
-export function newTask(videoFile: string): Task {
+export function newTask(videoFile: string, title?: string): Task {
   const t: Task = {
     id: randomUUID().slice(0, 8),
     status: "queued",
     progress: 0,
     message: "已加入队列",
     videoFile,
+    title,
     createdAt: Date.now(),
   };
   fs.writeFileSync(taskPath(t.id), JSON.stringify(t));
   return t;
+}
+
+/** 列出所有任务（按时间倒序），用于课程频道与全文搜索 */
+export function listTasks(): Task[] {
+  if (!fs.existsSync(TASK_DIR)) return [];
+  const out: Task[] = [];
+  for (const f of fs.readdirSync(TASK_DIR)) {
+    if (!f.endsWith(".json")) continue;
+    try {
+      out.push(JSON.parse(fs.readFileSync(path.join(TASK_DIR, f), "utf-8")) as Task);
+    } catch {
+      /* 跳过损坏文件 */
+    }
+  }
+  return out.sort((a, b) => b.createdAt - a.createdAt);
 }
 
 export function getTask(id: string): Task | undefined {
@@ -178,51 +212,67 @@ export async function translate(taskId: string) {
   if (!t || !t.segments) throw new Error("segments missing");
   updateTask(taskId, { status: "translating", progress: 65, message: "DeepSeek 翻译中…" });
 
-  const key = process.env.DEEPSEEK_API_KEY;
-  if (!key || key.startsWith("sk-xxxx")) {
-    throw new Error("未配置 DEEPSEEK_API_KEY，请在项目根目录 .env.local 中填写");
-  }
-  const base = process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com";
-  const model = process.env.DEEPSEEK_MODEL || "deepseek-chat";
-
   const segs = t.segments;
   const BATCH = 20;
   for (let i = 0; i < segs.length; i += BATCH) {
     const batch = segs.slice(i, i + BATCH);
     const payload = batch.map((s, n) => ({ n, en: s.text }));
-    const resp = await fetch(`${base}/chat/completions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        model,
-        temperature: 0.3,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content:
-              "你是短视频字幕翻译。把英文字幕翻译成简体中文，要求：口语化、贴合原意、简洁（每条不超过20字），保留专有名词原文。只输出 JSON：{\"items\":[{\"n\":序号,\"zh\":\"译文\"}]}",
-          },
-          { role: "user", content: JSON.stringify({ items: payload }) },
-        ],
-      }),
-    });
-    if (!resp.ok) {
-      const body = await resp.text();
-      throw new Error(`DeepSeek API ${resp.status}: ${body.slice(0, 300)}`);
-    }
-    const data = await resp.json();
-    const parsed = JSON.parse(data.choices[0].message.content) as { items?: { n: number; zh: string }[] };
+    const data = await deepseekJson(
+      "你是短视频字幕翻译。把英文字幕翻译成简体中文，要求：口语化、贴合原意、简洁（每条不超过20字），保留专有名词原文。只输出 JSON：{\"items\":[{\"n\":序号,\"zh\":\"译文\"}]}",
+      JSON.stringify({ items: payload })
+    );
+    const parsed = data as { items?: { n: number; zh: string }[] };
     for (const item of parsed.items || []) {
       const idx = i + (item.n ?? 0);
       if (segs[idx]) segs[idx].zh = String(item.zh || "").trim();
     }
     updateTask(taskId, {
-      progress: 65 + Math.round(((i + BATCH) / segs.length) * 25),
+      progress: 65 + Math.round(((i + BATCH) / segs.length) * 20),
       message: `翻译中 ${Math.min(i + BATCH, segs.length)}/${segs.length}`,
     });
   }
-  updateTask(taskId, { segments: segs, status: "ready", progress: 92, message: "双语字幕已生成" });
+  updateTask(taskId, { segments: segs, progress: 85, message: "翻译完成" });
+}
+
+/**
+ * 阶段四：AI 课堂摘要 + 专业词表（借鉴 Otter 的 AI 摘要/行动项、Notta 的可视化笔记）
+ * 一次调用同时产出要点、教授强调项、待办与中英术语表。
+ */
+export async function analyze(taskId: string) {
+  const t = getTask(taskId);
+  if (!t || !t.segments) throw new Error("segments missing");
+  updateTask(taskId, { status: "analyzing", progress: 88, message: "AI 生成课堂笔记与词表…" });
+
+  // 全英文课堂 transcript 可能很长，截断到 ~12000 字符避免超上下文
+  const transcript = t.segments
+    .map((s) => s.text)
+    .join(" ")
+    .slice(0, 12000);
+
+  const data = await deepseekJson(
+    "你是中外合作办学学生的课堂笔记助手。阅读英文课堂逐字稿，输出结构化中文笔记与术语表。" +
+      "只输出 JSON：{\"points\":[\"核心要点\"],\"emphasis\":[\"教授反复强调或疑似考点\"]," +
+      "\"actions\":[\"作业/deadline/待办，没有则空数组\"]," +
+      "\"glossary\":[{\"en\":\"英文术语\",\"zh\":\"中文释义\",\"note\":\"简短说明\"}]}" +
+      "。points/emphasis 各 3-6 条，actions 0-5 条，glossary 挑 6-12 个学术/专业术语。",
+    JSON.stringify({ transcript }),
+    0.2
+  );
+
+  const arr = (v: unknown): string[] => (Array.isArray(v) ? v.map((x) => String(x).trim()).filter(Boolean) : []);
+  const summary: Summary = {
+    points: arr(data.points),
+    emphasis: arr(data.emphasis),
+    actions: arr(data.actions),
+  };
+  const glossary: GlossaryItem[] = (Array.isArray(data.glossary) ? data.glossary : [])
+    .map((g) => {
+      const o = (g || {}) as Record<string, unknown>;
+      return { en: String(o.en || "").trim(), zh: String(o.zh || "").trim(), note: String(o.note || "").trim() };
+    })
+    .filter((g) => g.en && g.zh);
+
+  updateTask(taskId, { summary, glossary, status: "ready", progress: 92, message: "双语字幕与课堂笔记已生成" });
 }
 
 /** SRT 工具 */
@@ -249,110 +299,23 @@ export function writeSrt(taskId: string): string {
   return file;
 }
 
-/** VTT 时间轴：HH:MM:SS.mmm */
-function fmtVtt(sec: number): string {
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = Math.floor(sec % 60);
-  const ms = Math.round((sec - Math.floor(sec)) * 1000);
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}.${String(ms).padStart(3, "0")}`;
-}
-
-/** WebVTT 双语字幕（HTML5 <track> / YouTube 通用） */
-export function buildVtt(segs: Segment[]): string {
-  const cues = segs
-    .map((s) => `${fmtVtt(s.start)} --> ${fmtVtt(s.end)}\n${s.text}\n${s.zh || ""}\n`)
-    .join("\n");
-  return `WEBVTT\n\n${cues}`;
-}
-
-/** ASS 时间轴：H:MM:SS.cc（百分秒） */
-function fmtAss(sec: number): string {
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = Math.floor(sec % 60);
-  const cs = Math.floor((sec - Math.floor(sec)) * 100);
-  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}.${String(cs).padStart(2, "0")}`;
-}
-
-function assEscape(text: string): string {
-  return text.replace(/\{/g, "(").replace(/\}/g, ")").replace(/\r?\n/g, " ");
-}
-
-/**
- * ASS 双语字幕。fancy=true 时为「花字」模式：
- * 英文白色深蓝描边 + 中文金色，带淡入缩放动画
- * 注意：ASS 颜色为 &HAABBGGRR（蓝绿红逆序）
- */
-export function buildAss(segs: Segment[], fancy = false): string {
-  const styles = fancy
-    ? [
-        "Style: EN,Microsoft YaHei,34,&H00FFFFFF,&H000000FF,&H00442A1A,&H00000000,-1,0,0,0,100,100,1,0,1,3,1,2,40,40,110,1",
-        "Style: ZH,Microsoft YaHei,40,&H004AD2F8,&H000000FF,&H002E5BA5,&H003C1F0A,-1,0,0,0,100,100,0,0,1,2.5,1.5,2,40,40,150,1",
-      ]
-    : [
-        "Style: EN,Microsoft YaHei,42,&H00FFFFFF,&H000000FF,&H00000000,&H96000000,-1,0,0,0,100,100,0,0,1,2.2,0,2,60,60,60,1",
-        "Style: ZH,Microsoft YaHei,44,&H00A0C9F5,&H000000FF,&H00000000,&H96000000,-1,0,0,0,100,100,0,0,1,2.2,0,2,60,60,60,1",
-      ];
-
-  const events = segs
-    .map((s, i) => {
-      const en = assEscape(s.text);
-      const zh = assEscape(s.zh || "");
-      const fx = fancy ? `\\fad(220,180)\\t(0,260,\\fscx106\\fscy106\\t(260,520,\\fscx100\\fscy100))` : "";
-      const effect = fancy ? `N0${String(i + 1).padStart(3, "0")}` : "";
-      return `Dialogue: 0,${fmtAss(s.start)},${fmtAss(s.end)},EN,,0,0,0,${effect},{${fx}}${en}\\N{\\rZH}${zh}`;
-    })
-    .join("\n");
-
-  return [
-    "[Script Info]",
-    "; Generated by 视频快译",
-    "ScriptType: v4.00+",
-    "PlayResX: 720",
-    "PlayResY: 1280",
-    "ScaledBorderAndShadow: yes",
-    "WrapStyle: 0",
-    "",
-    "[V4+ Styles]",
-    "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-    ...styles,
-    "",
-    "[Events]",
-    "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
-    events,
-    "",
-  ].join("\n");
-}
-
-/** 阶段四：烧录双语字幕（优先 NVENC 显卡编码，失败回退 libx264）
- *  style: classic = SRT + force_style；fancy = ASS 花字（libass 直接读取内嵌样式） */
-export async function burnSubtitles(taskId: string, style: "classic" | "fancy" = "classic") {
+/** 阶段四：烧录双语字幕（优先 NVENC 显卡编码，失败回退 libx264） */
+export async function burnSubtitles(taskId: string) {
   const t = getTask(taskId);
   if (!t) throw new Error("task not found");
   if (!t.segments) throw new Error("segments missing");
   updateTask(taskId, { status: "burning", progress: 95, message: "正在烧录字幕视频（GPU 加速）…" });
 
   const out = path.join(OUT_DIR, `${t.id}.subtitled.mp4`);
+  const srt = t.srtFile || writeSrt(taskId);
   // Windows + ffmpeg9：必须 filename='...' 显式命名，正斜杠路径 + 转义盘符冒号（C\:/），
   // 否则 "C:" 会被当作 original_size 选项解析失败
-  const toFilterPath = (p: string) => {
-    const fwd = p.replace(/\\/g, "/"); // "C:/Users/..."
-    return `${fwd.slice(0, 1)}\\:${fwd.slice(2)}`.replace(/'/g, "\\'"); // "C\:/Users/..."
-  };
-
-  let vf: string;
-  if (style === "fancy") {
-    const assFile = path.join(OUT_DIR, `${t.id}.fancy.ass`);
-    fs.writeFileSync(assFile, buildAss(t.segments, true), "utf-8");
-    vf = `subtitles=filename='${toFilterPath(assFile)}'`;
-  } else {
-    const srt = t.srtFile || writeSrt(taskId);
-    const assStyle =
-      "FontName=Microsoft YaHei,FontSize=13,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000," +
-      "BorderStyle=1,Outline=1.5,Shadow=0.5,Alignment=2,MarginV=60";
-    vf = `subtitles=filename='${toFilterPath(srt)}':force_style='${assStyle}'`;
-  }
+  const fwd = srt.replace(/\\/g, "/");
+  const escaped = `${fwd.slice(0, 1)}\\:${fwd.slice(2)}`.replace(/'/g, "\\'");
+  const assStyle =
+    "FontName=Microsoft YaHei,FontSize=13,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000," +
+    "BorderStyle=1,Outline=1.5,Shadow=0.5,Alignment=2,MarginV=60";
+  const vf = `subtitles=filename='${escaped}':force_style='${assStyle}'`;
 
   const nvencArgs = [
     "-y", "-i", t.videoFile, "-vf", vf,
@@ -378,12 +341,168 @@ export async function burnSubtitles(taskId: string, style: "classic" | "fancy" =
   updateTask(taskId, { burnedFile: out, status: "done", progress: 100, message: "完成" });
 }
 
-/** 总编排：上传后自动跑 抽取→转写→翻译 */
+/** 生成 Markdown 复习笔记（借鉴 Notta Document Builder：转录 + 摘要 → 结构化文档） */
+export function buildNotesMarkdown(taskId: string): string {
+  const t = getTask(taskId);
+  if (!t || !t.segments) throw new Error("segments missing");
+  const date = new Date(t.createdAt).toLocaleDateString("zh-CN");
+  const L: string[] = [];
+  L.push(`# ${t.title || `视频 ${t.id}`} · 课堂笔记`);
+  L.push(`> 课程：${t.course || "未分类"} ｜ 日期：${date} ｜ 共 ${t.segments.length} 句`);
+  L.push("");
+  if (t.summary && (t.summary.points.length || t.summary.emphasis.length || t.summary.actions.length)) {
+    L.push("## 本节课要点");
+    for (const p of t.summary.points) L.push(`- ${p}`);
+    L.push("");
+    if (t.summary.emphasis.length) {
+      L.push("## ⚠️ 教授强调 / 疑似考点");
+      for (const p of t.summary.emphasis) L.push(`- ${p}`);
+      L.push("");
+    }
+    if (t.summary.actions.length) {
+      L.push("## ✅ 待办事项");
+      for (const p of t.summary.actions) L.push(`- [ ] ${p}`);
+      L.push("");
+    }
+  }
+  if (t.glossary?.length) {
+    L.push("## 📖 专业词表");
+    L.push("| 英文术语 | 中文释义 | 说明 |");
+    L.push("| --- | --- | --- |");
+    for (const g of t.glossary) L.push(`| ${g.en} | ${g.zh} | ${g.note || ""} |`);
+    L.push("");
+  }
+  L.push("## 双语转录全文");
+  for (const s of t.segments) L.push(`**[${fmtClock(s.start)}]** ${s.text}\n\n${s.zh || ""}\n`);
+  return L.join("\n");
+}
+
+function fmtClock(sec: number): string {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = Math.floor(sec % 60);
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function escHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** 生成深色 Apple 风 HTML 复习笔记（可直接浏览器打开 / 打印成 PDF） */
+export function buildNotesHtml(taskId: string): string {
+  const t = getTask(taskId);
+  if (!t || !t.segments) throw new Error("segments missing");
+  const date = new Date(t.createdAt).toLocaleDateString("zh-CN");
+  const li = (arr: string[]) => arr.map((x) => `<li>${escHtml(x)}</li>`).join("");
+  const glossRows = (t.glossary || [])
+    .map((g) => `<tr><td class="en">${escHtml(g.en)}</td><td>${escHtml(g.zh)}</td><td class="note">${escHtml(g.note || "")}</td></tr>`)
+    .join("");
+  const transcript = t.segments
+    .map((s) => `<div class="seg"><span class="ts">${fmtClock(s.start)}</span><div><p class="en">${escHtml(s.text)}</p><p class="zh">${escHtml(s.zh || "")}</p></div></div>`)
+    .join("");
+  return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escHtml(t.title || "课堂笔记")} · 视频快译</title>
+<style>
+:root{--bg:#050506;--panel:#17171a;--line:#2a2a2e;--text:#f5f5f7;--muted:#86868b;--accent:#2997ff}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","PingFang SC","Microsoft YaHei",sans-serif;margin:0;padding:48px 24px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:820px;margin:0 auto}
+h1{font-size:32px;letter-spacing:-.02em;margin:0 0 8px}
+.meta{color:var(--muted);font-size:14px;margin-bottom:36px}
+h2{font-size:20px;margin:36px 0 14px;letter-spacing:-.01em}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:22px 26px;margin-bottom:18px}
+ul{margin:0;padding-left:20px;line-height:1.8}
+.card.warn{border-color:rgba(255,214,10,.35)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}
+th{color:var(--muted);font-weight:500}
+td.en{color:var(--accent);font-family:ui-monospace,"SF Mono",monospace}
+td.note{color:var(--muted)}
+.seg{display:flex;gap:14px;padding:10px 0;border-bottom:1px solid var(--line)}
+.ts{color:var(--muted);font-family:ui-monospace,monospace;font-size:12px;min-width:52px;padding-top:3px}
+.en{margin:0;line-height:1.6}
+.zh{margin:4px 0 0;color:var(--accent);line-height:1.6;font-size:14px}
+footer{margin-top:48px;color:var(--muted);font-size:12px;text-align:center}
+@media print{body{background:#fff;color:#111}.card{border-color:#ddd;background:#fafafa}.zh{color:#06c}.ts{color:#888}}
+</style></head><body><div class="wrap">
+<h1>${escHtml(t.title || `视频 ${t.id}`)}</h1>
+<p class="meta">课程：${escHtml(t.course || "未分类")} ｜ ${date} ｜ ${t.segments.length} 句转录</p>
+${t.summary?.points?.length ? `<h2>本节课要点</h2><div class="card"><ul>${li(t.summary.points)}</ul></div>` : ""}
+${t.summary?.emphasis?.length ? `<h2>教授强调 / 疑似考点</h2><div class="card warn"><ul>${li(t.summary.emphasis)}</ul></div>` : ""}
+${t.summary?.actions?.length ? `<h2>待办事项</h2><div class="card"><ul>${li(t.summary.actions)}</ul></div>` : ""}
+${glossRows ? `<h2>专业词表</h2><div class="card"><table><tr><th>英文术语</th><th>中文释义</th><th>说明</th></tr>${glossRows}</table></div>` : ""}
+<h2>双语转录全文</h2><div class="card">${transcript}</div>
+<footer>由「视频快译」自动生成 · 本地处理 · 视频不出本机</footer>
+</div></body></html>`;
+}
+
+/** 全文搜索：跨所有任务的转录文本 / 中文译文 / 摘要 / 课程名，命中定位到句级时间戳 */
+export type SearchHit = {
+  taskId: string;
+  title?: string;
+  course?: string;
+  start: number;
+  end: number;
+  text: string;
+  zh?: string;
+};
+
+export function searchAll(query: string): SearchHit[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const terms = q.split(/\s+/).filter(Boolean);
+  const hits: (SearchHit & { score: number })[] = [];
+  for (const t of listTasks()) {
+    if (!t.segments) continue;
+    const meta = `${t.title || ""} ${t.course || ""}`.toLowerCase();
+    for (const s of t.segments) {
+      const hay = `${s.text} ${s.zh || ""}`.toLowerCase();
+      let score = 0;
+      for (const term of terms) {
+        if (hay.includes(term)) score += 2;
+        if (meta.includes(term)) score += 1;
+      }
+      if (score > 0) hits.push({ taskId: t.id, title: t.title, course: t.course, start: s.start, end: s.end, text: s.text, zh: s.zh, score });
+    }
+  }
+  return hits.sort((a, b) => b.score - a.score).slice(0, 50).map(({ score: _s, ...h }) => h);
+}
+
+/** 跨课程问答的语料检索（词法打分，本地零依赖）：返回最相关的若干句上下文 */
+export function retrieveCorpus(query: string, course?: string): string {
+  const terms = query.toLowerCase().split(/\s+/).filter((w) => w.length > 1);
+  const scored: { text: string; score: number; taskId: string; title?: string }[] = [];
+  for (const t of listTasks()) {
+    if (course && t.course !== course) continue;
+    if (!t.segments) continue;
+    // 以 5 句为窗口聚合，给模型足够的上下文
+    const win: Segment[] = [];
+    for (let i = 0; i < t.segments.length; i++) {
+      win.push(t.segments[i]);
+      if (win.length === 5) {
+        const hay = win.map((s) => `${s.text} ${s.zh || ""}`).join(" ").toLowerCase();
+        let score = 0;
+        for (const term of terms) if (hay.includes(term)) score += 1;
+        if (score > 0) scored.push({ text: win.map((s) => `[${fmtClock(s.start)}] ${s.text}（${s.zh || ""}）`).join("\n"), score, taskId: t.id, title: t.title });
+        win.shift();
+      }
+    }
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return scored
+    .slice(0, 12)
+    .map((x) => `【${x.title || x.taskId}】\n${x.text}`)
+    .join("\n\n");
+}
+
+/** 总编排：上传后自动跑 抽取→转写→翻译→AI 笔记 */
 export async function runPipeline(taskId: string) {
   try {
     await extractAudio(taskId);
     await transcribe(taskId);
     await translate(taskId);
+    await analyze(taskId);
   } catch (e) {
     updateTask(taskId, { status: "error", error: e instanceof Error ? e.message : String(e), message: "处理失败" });
   }
