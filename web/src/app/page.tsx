@@ -442,7 +442,7 @@ export default function Home() {
                   <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest mb-4">
                     专业词表 · {task.glossary.length} 个术语
                   </p>
-                  <div className="max-h-[340px] overflow-y-auto divide-y divide-[var(--line)] pb-3">
+                  <div className="max-h-[340px] overflow-y-auto divide-y divide-[var(--hair)] pb-3">
                     {task.glossary.map((g, i) => (
                       <div key={i} className="py-3 flex flex-col gap-0.5">
                         <p className="text-sm">
@@ -462,21 +462,21 @@ export default function Home() {
           <div className="panel overflow-hidden">
             <div className="grid grid-cols-[70px_1fr_1fr] bg-[var(--bg-2)] text-xs mono text-[var(--muted)] uppercase">
               <div className="p-3">时间</div>
-              <div className="p-3 border-l border-[var(--line)]">English</div>
-              <div className="p-3 border-l border-[var(--line)]">中文</div>
+              <div className="p-3 border-l border-[var(--hair)]">English</div>
+              <div className="p-3 border-l border-[var(--hair)]">中文</div>
             </div>
-            <div className="max-h-[420px] overflow-y-auto divide-y divide-[var(--line)]">
+            <div className="max-h-[420px] overflow-y-auto divide-y divide-[var(--hair)]">
               {segs.map((s, i) => (
                 <div key={i} className="grid grid-cols-[70px_1fr_1fr] items-start hover:bg-[rgba(232,99,74,0.05)]">
                   <div className="p-3 mono text-xs text-[var(--muted)]">{fmt(s.start)}</div>
                   <textarea
-                    className="bg-transparent p-3 text-sm resize-none outline-none border-l border-[var(--line)] focus:bg-[var(--bg-2)] min-h-[44px]"
+                    className="bg-transparent p-3 text-sm resize-none outline-none border-l border-[var(--hair)] focus:bg-[var(--bg-2)] min-h-[44px]"
                     rows={2}
                     value={s.text}
                     onChange={(e) => editSeg(i, "text", e.target.value)}
                   />
                   <textarea
-                    className="bg-transparent p-3 text-sm resize-none outline-none border-l border-[var(--line)] focus:bg-[var(--bg-2)] min-h-[44px]"
+                    className="bg-transparent p-3 text-sm resize-none outline-none border-l border-[var(--hair)] focus:bg-[var(--bg-2)] min-h-[44px]"
                     rows={2}
                     value={s.zh || ""}
                     onChange={(e) => editSeg(i, "zh", e.target.value)}

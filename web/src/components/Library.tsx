@@ -224,7 +224,7 @@ export default function Library({ onOpen }: { onOpen: (taskId: string) => void }
                 <button
                   key={i}
                   onClick={() => onOpen(h.taskId)}
-                  className="w-full text-left px-5 py-4 border-b border-[var(--line)] last:border-b-0 hover:bg-[rgba(232,99,74,0.05)] transition-colors duration-150"
+                  className="w-full text-left px-5 py-4 border-b border-[var(--hair)] last:border-b-0 hover:bg-[rgba(232,99,74,0.05)] transition-colors duration-150"
                 >
                   <p className="text-xs mono text-[var(--muted)] mb-1">
                     {h.course ? `${h.course} · ` : ""}
