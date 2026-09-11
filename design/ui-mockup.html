@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>视频快译 Pro · UI 原型</title>
+<style>
+  :root {
+    --bg:#070b14; --panel:#0e1728; --panel2:#0b1220; --line:#1c2a44; --line2:#2b3f63;
+    --text:#dbe6f5; --muted:#7286a3; --accent:#38bdf8; --accent2:#6366f1;
+    --ok:#34d399; --warn:#fbbf24; --err:#f87171;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(56,189,248,.08), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(99,102,241,.08), transparent 60%),
+      var(--bg);
+    color:var(--text); font-family:"Microsoft YaHei","Segoe UI",sans-serif;
+    width:1440px; height:900px; overflow:hidden;
+  }
+  .mono { font-family:Consolas,"Cascadia Code",monospace; }
+
+  /* ── 顶栏 ── */
+  header { display:flex; align-items:center; justify-content:space-between; padding:16px 32px; border-bottom:1px solid var(--line); }
+  .logo { font-size:20px; font-weight:700; }
+  .logo .p { color:var(--accent); }
+  .logo .pro { font-size:11px; color:#04070d; background:linear-gradient(135deg,var(--accent),var(--accent2)); border-radius:5px; padding:2px 7px; margin-left:8px; vertical-align:3px; }
+  nav { display:flex; gap:6px; }
+  nav a { color:var(--muted); text-decoration:none; font-size:14px; padding:8px 16px; border-radius:8px; }
+  nav a.on { color:var(--text); background:rgba(56,189,248,.1); border:1px solid var(--line2); }
+  .badges { display:flex; gap:10px; align-items:center; font-size:12px; }
+  .badge { border:1px solid var(--line2); border-radius:999px; padding:5px 12px; color:var(--muted); }
+  .badge.gpu { color:var(--warn); border-color:rgba(251,191,36,.4); }
+  .badge.local { color:var(--ok); border-color:rgba(52,211,153,.4); }
+
+  /* ── 主体三栏 ── */
+  main { display:grid; grid-template-columns:340px 1fr 300px; gap:18px; padding:18px 32px; height:806px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; }
+  .ptitle { font-size:12px; color:var(--muted); letter-spacing:2px; padding:14px 18px 0; }
+
+  /* 左栏 */
+  .left { display:flex; flex-direction:column; gap:14px; overflow:hidden; }
+  .video-card { padding:14px; }
+  .video-box { position:relative; border-radius:8px; overflow:hidden; border:1px solid var(--line2); height:300px; background:#000; }
+  .video-box img { width:100%; height:100%; object-fit:cover; opacity:.85; }
+  .play { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+  .play span { width:48px; height:48px; border-radius:50%; background:rgba(7,11,20,.7); border:1px solid var(--accent); color:var(--accent); display:flex; align-items:center; justify-content:center; font-size:18px; }
+  .vmeta { display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-top:10px; }
+  .vmeta b { color:var(--text); font-weight:500; }
+  .settings { padding:14px 18px 18px; display:flex; flex-direction:column; gap:12px; }
+  .field label { font-size:11px; color:var(--muted); display:block; margin-bottom:5px; }
+  .sel { display:flex; justify-content:space-between; align-items:center; border:1px solid var(--line2); border-radius:8px; padding:9px 12px; font-size:13px; background:var(--panel2); }
+  .sel .auto { color:var(--accent); font-size:10px; border:1px solid rgba(56,189,248,.4); border-radius:4px; padding:1px 6px; margin-left:8px; }
+  .sel::after { content:"▾"; color:var(--muted); font-size:11px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; }
+  .chip { font-size:12px; border:1px solid var(--line2); color:var(--muted); border-radius:7px; padding:6px 12px; }
+  .chip.on { color:#04070d; background:var(--accent); border-color:var(--accent); font-weight:600; }
+  .chip.on2 { color:var(--accent); border-color:var(--accent); }
+
+  /* 中栏：字幕表 */
+  .center { display:flex; flex-direction:column; overflow:hidden; }
+  .ctop { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid var(--line); }
+  .ctop .t { font-size:15px; font-weight:600; }
+  .ctop .t small { color:var(--ok); font-size:12px; margin-left:10px; }
+  .steps { display:flex; gap:0; font-size:11px; }
+  .step { color:var(--muted); padding:4px 12px; position:relative; }
+  .step::after { content:"›"; position:absolute; right:-4px; color:var(--line2); }
+  .step:last-child::after { display:none; }
+  .step.done { color:var(--ok); }
+  .step.now { color:var(--accent); font-weight:600; }
+  .thead, .trow { display:grid; grid-template-columns:56px 64px 1fr 1fr 70px; gap:0; }
+  .thead { font-size:11px; color:var(--muted); letter-spacing:1px; padding:10px 18px; background:var(--panel2); border-bottom:1px solid var(--line); }
+  .trows { overflow:hidden; flex:1; }
+  .trow { padding:13px 18px; border-bottom:1px solid var(--line); font-size:13px; align-items:center; }
+  .trow:hover { background:rgba(56,189,248,.04); }
+  .trow .idx { color:var(--muted); font-size:11px; }
+  .trow .tc { color:var(--muted); font-size:11px; }
+  .trow .en { padding-right:16px; color:var(--text); }
+  .trow .zh { padding-right:16px; color:var(--accent); }
+  .trow .act { display:flex; gap:8px; color:var(--line2); font-size:13px; justify-content:flex-end; }
+  .trow .act span { color:var(--muted); }
+  .trow .act span:hover { color:var(--accent); }
+  .trow.fix .zh { color:var(--warn); border-bottom:1px dashed rgba(251,191,36,.5); }
+
+  /* 右栏 */
+  .right { display:flex; flex-direction:column; gap:14px; overflow:hidden; }
+  .export { padding:14px 18px 18px; }
+  .exp-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
+  .exp { border:1px solid var(--line2); border-radius:9px; padding:12px 10px; text-align:center; font-size:13px; }
+  .exp b { display:block; font-size:15px; margin-bottom:2px; }
+  .exp small { color:var(--muted); font-size:10px; }
+  .exp.pri { background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#04070d; border:none; font-weight:700; }
+  .exp.pri small { color:rgba(4,7,13,.65); }
+  .burn { margin-top:12px; border:1px solid var(--line2); border-radius:9px; padding:12px; font-size:12px; }
+  .bar { height:5px; background:var(--panel2); border-radius:3px; overflow:hidden; margin-top:8px; }
+  .bar i { display:block; height:100%; width:72%; background:linear-gradient(90deg,var(--accent),var(--accent2)); }
+  .dub { padding:14px 18px 18px; }
+  .voices { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .voice { font-size:12px; border:1px solid var(--line2); border-radius:999px; padding:6px 14px; color:var(--muted); }
+  .voice.on { color:var(--accent); border-color:var(--accent); background:rgba(56,189,248,.08); }
+  .dub-btn { margin-top:14px; width:100%; text-align:center; border-radius:9px; padding:11px 0; font-size:13px; font-weight:600; background:rgba(99,102,241,.15); color:#a5b4fc; border:1px solid rgba(99,102,241,.5); }
+  .ocr { padding:14px 18px 18px; font-size:12px; color:var(--muted); line-height:1.7; }
+  .ocr b { color:var(--text); font-size:13px; display:block; margin-bottom:4px; }
+  .ocr .tag { color:var(--warn); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><span class="p mono">&gt;_</span> 视频快译<span class="pro mono">PRO</span></div>
+  <nav>
+    <a class="on" href="#">工作台</a>
+    <a href="#">字幕工厂</a>
+    <a href="#">AI 配音</a>
+    <a href="#">硬字幕 OCR</a>
+    <a href="#">历史记录</a>
+  </nav>
+  <div class="badges">
+    <span class="badge local mono">● 本地转写 · 视频不出机</span>
+    <span class="badge gpu mono">⚡ NVENC GPU 编码 · 快 4×</span>
+    <span class="badge mono">faster-whisper · DeepSeek</span>
+  </div>
+</header>
+
+<main>
+  <!-- 左栏 -->
+  <div class="left">
+    <div class="panel video-card">
+      <div class="video-box">
+        <img src="../.data/work/verify_frame.png" alt="preview">
+        <div class="play"><span>▶</span></div>
+      </div>
+      <div class="vmeta mono"><span><b>ted-talk.mp4</b> · 1:24</span><span>720×1556</span></div>
+    </div>
+
+    <div class="panel settings">
+      <div class="field">
+        <label>翻译方向</label>
+        <div class="sel"><span>English → 简体中文<span class="auto">自动检测</span></span></div>
+      </div>
+      <div class="field">
+        <label>Whisper 模型</label>
+        <div class="chips">
+          <span class="chip">tiny</span><span class="chip">base</span><span class="chip on">small</span><span class="chip">medium</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>字幕样式预设</label>
+        <div class="chips">
+          <span class="chip on2">经典双语</span><span class="chip">花字 ASS</span><span class="chip">极简</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 中栏 -->
+  <div class="panel center">
+    <div class="ctop">
+      <div class="t">双语对照编辑器 <small>✓ 已自动对齐时间轴</small></div>
+      <div class="steps mono">
+        <span class="step done">✓ 抽取音轨</span><span class="step done">✓ 转写 11 句</span><span class="step done">✓ 翻译</span><span class="step now">● 校对中</span>
+      </div>
+    </div>
+    <div class="thead mono"><span>#</span><span>时间</span><span>ENGLISH</span><span>中文</span><span></span></div>
+    <div class="trows">
+      <div class="trow"><span class="idx mono">01</span><span class="tc mono">0:00–0:04</span><span class="en">Well, let me tell you a secret.</span><span class="zh">告诉你个秘密。</span><span class="act"><span>✎</span><span>▶</span></span></div>
+      <div class="trow"><span class="idx mono">02</span><span class="tc mono">0:04–0:07</span><span class="en">No one does when they begin.</span><span class="zh">开始的时候谁都不懂。</span><span class="act"><span>✎</span><span>▶</span></span></div>
+      <div class="trow"><span class="idx mono">03</span><span class="tc mono">0:07–0:11</span><span class="en">Ideas don't come out fully formed.</span><span class="zh">想法不是一开始就成型的。</span><span class="act"><span>✎</span><span>▶</span></span></div>
+      <div class="trow"><span class="idx mono">04</span><span class="tc mono">0:11–0:16</span><span class="en">They only become clear as you work on them.</span><span class="zh">做着做着才慢慢清晰。</span><span class="act"><span>✎</span><span>▶</span></span></div>
+      <div class="trow fix"><span class="idx mono">05</span><span class="tc mono">0:16–0:20</span><span class="en">You just have to get started.</span><span class="zh">你只需要开始去做。</span><span class="act"><span>✎</span><span>▶</span></span></div>
+      <div class="trow"><span class="idx mono">06</span><span class="tc mono">0:20–0:27</span><span class="en">If I had to know everything about connecting people before I got started,</span><span class="zh">如果开始前就得懂如何连接所有人，</span><span class="act"><span>✎</span><span>▶</span></span></div>
+      <div class="trow"><span class="idx mono">07</span><span class="tc mono">0:27–0:30</span><span class="en">I never would have built Facebook.</span><span class="zh">我永远建不成 Facebook。</span><span class="act"><span>✎</span><span>▶</span></span></div>
+      <div class="trow"><span class="idx mono">08</span><span class="tc mono">0:30–0:36</span><span class="en">Pop culture movies get this all wrong.</span><span class="zh">流行文化里的电影全搞错了。</span><span class="act"><span>✎</span><span>▶</span></span></div>
+      <div class="trow"><span class="idx mono">09</span><span class="tc mono">0:36–0:42</span><span class="en">The flash of inspiration is a dangerous lie.</span><span class="zh">灵光一现是个危险的谎言。</span><span class="act"><span>✎</span><span>▶</span></span></div>
+    </div>
+  </div>
+
+  <!-- 右栏 -->
+  <div class="right">
+    <div class="panel export">
+      <div class="ptitle" style="padding:0">导出 EXPORT</div>
+      <div class="exp-grid">
+        <div class="exp pri"><b>SRT</b><small>双语 · 剪映可用</small></div>
+        <div class="exp"><b>VTT</b><small>网页播放器</small></div>
+        <div class="exp"><b>ASS</b><small>花字样式</small></div>
+        <div class="exp"><b>TXT</b><small>纯文稿</small></div>
+      </div>
+      <div class="burn">
+        <div style="display:flex;justify-content:space-between"><span>🎬 烧录双语视频</span><span class="mono" style="color:var(--accent)">72% · 0:24</span></div>
+        <div class="bar"><i></i></div>
+        <div class="mono" style="margin-top:6px;color:var(--muted);font-size:10px">NVENC 加速中，预计还需 8 秒</div>
+      </div>
+    </div>
+
+    <div class="panel dub">
+      <div class="ptitle" style="padding:0">AI 配音 DUBBING <span style="color:var(--accent2)">NEW</span></div>
+      <div class="voices">
+        <span class="voice on">知男 · 沉稳</span><span class="voice">悦儿 · 活泼</span><span class="voice">云希 · 少年</span>
+      </div>
+      <div class="dub-btn">🔊 生成中文配音版</div>
+    </div>
+
+    <div class="panel ocr">
+      <b>无音轨？试试 OCR <span class="tag">BETA</span></b>
+      检测到视频含<b style="display:inline">硬字幕</b>或完全静音时，自动切换画面字幕识别路线（借鉴 video-subtitle-extractor）。
+      <div class="mono" style="margin-top:8px;color:var(--accent)">当前文件：静音 → 建议 OCR ⌄</div>
+    </div>
+  </div>
+</main>
+
+</body>
+</html>

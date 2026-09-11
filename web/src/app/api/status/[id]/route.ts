@@ -12,6 +12,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     progress: t.progress,
     message: t.message,
     error: t.error,
+    encoder: t.encoder,
     segments: t.segments,
     hasVideo: !!t.burnedFile,
   });

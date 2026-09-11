@@ -9,6 +9,7 @@ type Task = {
   progress: number;
   message: string;
   error?: string;
+  encoder?: string;
   segments?: Segment[];
   hasVideo?: boolean;
 };
@@ -87,36 +88,40 @@ export default function Home() {
     setSegs((prev) => prev.map((s, n) => (n === i ? { ...s, [field]: v } : s)));
   };
 
-  // 编辑后重新生成 SRT：把当前 segs POST 回后端覆盖（简化：直接前端拼 SRT 下载）
-  const downloadSrt = () => {
-    const fmtT = (sec: number) => {
-      const h = Math.floor(sec / 3600);
-      const m = Math.floor((sec % 3600) / 60);
-      const s = Math.floor(sec % 60);
-      const ms = Math.round((sec % 1) * 1000);
-      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")},${String(ms).padStart(3, "0")}`;
-    };
-    const body = segs
-      .map((s, i) => `${i + 1}\n${fmtT(s.start)} --> ${fmtT(s.end)}\n${s.text}\n${s.zh || ""}\n`)
-      .join("\n");
-    const blob = new Blob(["\ufeff" + body], { type: "text/plain;charset=utf-8" });
+  /** 导出字幕：先把当前编辑同步到后端，再由后端统一生成各格式 */
+  const downloadSub = async (fmt: "srt" | "vtt" | "ass" | "assfancy") => {
+    if (!task) return;
+    // 有编辑时先同步到后端，保证导出内容与界面一致
+    if (editedRef.current) {
+      await fetch(`/api/segments/${task.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ segments: segs }),
+      }).catch(() => {});
+    }
+    const ext = fmt === "assfancy" ? "ass" : fmt;
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `subtitle-${task?.id}.srt`;
+    a.href = `/api/subtitle/${task.id}?fmt=${fmt}`;
+    a.download = `subtitle-${task.id}.${ext}`;
     a.click();
-    URL.revokeObjectURL(a.href);
   };
 
-  const pushEditsAndBurn = async () => {
+  const pushEditsAndBurn = async (style: "classic" | "fancy" = "classic") => {
     if (!task) return;
     setBurning(true);
     // 先把编辑同步到后端，再触发烧录
-    await fetch(`/api/segments/${task.id}`, {
+    if (editedRef.current) {
+      await fetch(`/api/segments/${task.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ segments: segs }),
+      }).catch(() => {});
+    }
+    await fetch(`/api/burn/${task.id}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ segments: segs }),
+      body: JSON.stringify({ style }),
     }).catch(() => {});
-    await fetch(`/api/burn/${task.id}`, { method: "POST" }).catch(() => {});
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
       const r = await fetch(`/api/status/${task.id}`);
@@ -171,7 +176,7 @@ export default function Home() {
           />
           <div className="text-5xl mb-4 mono text-[var(--accent)]">⇪</div>
           <p className="text-lg font-medium">{uploading ? "上传中…" : "拖入或点击选择英文视频"}</p>
-          <p className="text-sm text-[var(--muted)] mt-2">支持 MP4 / MOV / MKV / WebM，≤ 500MB</p>
+          <p className="text-sm text-[var(--muted)] mt-2">支持 MP4 / MOV / MKV / WebM · ≤ 2GB · 最长 2 小时</p>
         </div>
       )}
 
@@ -239,41 +244,73 @@ export default function Home() {
             </div>
 
             {/* Actions */}
-            <div className="panel p-6 flex flex-col gap-4">
+            <div className="panel p-6 flex flex-col gap-5">
               <div>
                 <p className="font-medium">双语字幕已生成 ✓</p>
                 <p className="text-sm text-[var(--muted)] mt-1">
                   共 {segs.length} 句 · 可直接编辑下方文字，导出时以编辑内容为准
                 </p>
               </div>
-              <div className="flex flex-wrap gap-3">
-                <button className="btn-primary" onClick={downloadSrt}>
-                  ⬇ 下载双语 SRT
-                </button>
-                <button
-                  className="btn-ghost"
-                  disabled={burning || task.status === "burning" || task.status === "done"}
-                  onClick={pushEditsAndBurn}
-                >
-                  {task.status === "done"
-                    ? "已生成烧录视频"
-                    : burning || task.status === "burning"
-                      ? `烧录中… ${task.progress}%`
-                      : "🎬 生成烧录字幕视频"}
-                </button>
-                <button className="btn-ghost" onClick={() => setTask(null)}>
-                  处理下一个视频
-                </button>
+
+              {/* 导出四宫格 */}
+              <div>
+                <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest mb-2">导出字幕</p>
+                <div className="grid grid-cols-4 gap-2">
+                  <button className="btn-primary !px-2 !py-2.5 text-sm" onClick={() => downloadSub("srt")}>
+                    SRT
+                  </button>
+                  <button className="btn-ghost !px-2 !py-2.5 text-sm" onClick={() => downloadSub("vtt")}>
+                    VTT
+                  </button>
+                  <button className="btn-ghost !px-2 !py-2.5 text-sm" onClick={() => downloadSub("ass")}>
+                    ASS
+                  </button>
+                  <button className="btn-ghost !px-2 !py-2.5 text-sm" onClick={() => downloadSub("assfancy")}>
+                    ASS 花字
+                  </button>
+                </div>
+                <p className="text-[11px] text-[var(--muted)] mt-2">
+                  SRT 通用 · VTT 网页播放器 · ASS 花字带描边动画，剪映/AE 可再编辑
+                </p>
               </div>
+
+              {/* 烧录 */}
+              <div>
+                <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest mb-2">烧录进视频</p>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    className="btn-ghost"
+                    disabled={burning || task.status === "burning"}
+                    onClick={() => pushEditsAndBurn("classic")}
+                  >
+                    🎬 经典双语
+                  </button>
+                  <button
+                    className="btn-ghost"
+                    disabled={burning || task.status === "burning"}
+                    onClick={() => pushEditsAndBurn("fancy")}
+                  >
+                    ✨ 花字版
+                  </button>
+                  <button className="btn-ghost" onClick={() => setTask(null)}>
+                    下一个视频
+                  </button>
+                </div>
+              </div>
+
               {task.status === "done" && (
-                <a
-                  href={`/api/video/${task.id}/burned`}
-                  className="text-sm text-[var(--ok)] mono"
-                  download
-                >
-                  ⬇ 下载烧录版 mp4
-                </a>
+                <div className="flex items-center gap-4">
+                  <a href={`/api/video/${task.id}/burned`} className="text-sm text-[var(--ok)] mono" download>
+                    ⬇ 下载烧录版 mp4
+                  </a>
+                  {task.encoder && (
+                    <span className="text-[11px] mono px-2 py-1 rounded" style={{ border: "1px solid var(--line-2)", color: task.encoder === "h264_nvenc" ? "var(--warn)" : "var(--muted)" }}>
+                      {task.encoder === "h264_nvenc" ? "⚡ NVENC GPU 编码" : "CPU libx264"}
+                    </span>
+                  )}
+                </div>
               )}
+              {burning && <p className="text-sm text-[var(--accent)] mono animate-pulse"> {task.message} {task.progress}%</p>}
             </div>
           </div>
 

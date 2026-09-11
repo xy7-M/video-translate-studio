@@ -1,12 +1,15 @@
 import fs from "fs";
 import path from "path";
+import { Readable } from "stream";
+import { pipeline as streamPipeline } from "stream/promises";
 import { NextResponse } from "next/server";
-import { UPLOAD_DIR, newTask, updateTask, runPipeline } from "@/lib/pipeline";
+import { UPLOAD_DIR, newTask, updateTask, runPipeline, probeDuration, MAX_DURATION_SEC } from "@/lib/pipeline";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 const ALLOWED = new Set([".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v"]);
+const MAX_BYTES = 2 * 1024 * 1024 * 1024; // 2GB ≈ 2 小时 720p
 
 export async function POST(req: Request) {
   const form = await req.formData();
@@ -18,18 +21,31 @@ export async function POST(req: Request) {
   if (!ALLOWED.has(ext)) {
     return NextResponse.json({ error: `不支持的格式 ${ext}` }, { status: 400 });
   }
-  if (file.size > 500 * 1024 * 1024) {
-    return NextResponse.json({ error: "文件超过 500MB" }, { status: 400 });
+  if (file.size > MAX_BYTES) {
+    return NextResponse.json({ error: "文件超过 2GB（约等于 2 小时 720p）" }, { status: 400 });
   }
 
   const task = newTask("");
   const dest = path.join(UPLOAD_DIR, `${task.id}${ext}`);
-  const buf = Buffer.from(await file.arrayBuffer());
-  fs.writeFileSync(dest, buf);
-  task.videoFile = dest;
+
+  // 流式写盘：大文件不占内存
+  try {
+    await streamPipeline(Readable.fromWeb(file.stream() as never), fs.createWriteStream(dest));
+  } catch (e) {
+    fs.rmSync(dest, { force: true });
+    return NextResponse.json({ error: `保存失败：${e instanceof Error ? e.message : e}` }, { status: 500 });
+  }
   updateTask(task.id, { videoFile: dest });
+
+  // 时长校验：超过 2 小时直接拒绝并清理
+  const dur = await probeDuration(dest);
+  if (dur !== null && dur > MAX_DURATION_SEC) {
+    fs.rmSync(dest, { force: true });
+    updateTask(task.id, { status: "error", error: `视频时长 ${Math.round(dur / 60)} 分钟，超过 2 小时上限` });
+    return NextResponse.json({ error: `视频时长超过 2 小时上限（当前 ${Math.round(dur / 60)} 分钟）` }, { status: 400 });
+  }
 
   // fire-and-forget：后台跑管线，前端轮询状态
   void runPipeline(task.id);
-  return NextResponse.json({ taskId: task.id });
+  return NextResponse.json({ taskId: task.id, duration: dur });
 }
