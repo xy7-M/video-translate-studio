@@ -29,6 +29,7 @@ export default function Home() {
   const [segs, setSegs] = useState<Segment[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval>>();
+  const editedRef = useRef(false); // 用户手动改过字幕后，停止用后端数据覆盖前端
 
   const stepIndex = (() => {
     if (!task) return -1;
@@ -49,7 +50,8 @@ export default function Home() {
         const r = await fetch(`/api/status/${id}`);
         const t: Task = await r.json();
         setTask(t);
-        if (t.segments) setSegs((prev) => (prev.length ? prev : t.segments!));
+        // 用户未编辑时，始终以后端最新数据为准（转写→翻译会逐步补上 zh）
+        if (t.segments && !editedRef.current) setSegs(t.segments);
         if (["ready", "error", "done"].includes(t.status)) {
           clearInterval(pollRef.current);
         }
@@ -64,6 +66,7 @@ export default function Home() {
     setUploading(true);
     setTask(null);
     setSegs([]);
+    editedRef.current = false;
     const form = new FormData();
     form.append("video", file);
     try {
@@ -80,6 +83,7 @@ export default function Home() {
   };
 
   const editSeg = (i: number, field: "text" | "zh", v: string) => {
+    editedRef.current = true; // 用户开始编辑，冻结后端覆盖
     setSegs((prev) => prev.map((s, n) => (n === i ? { ...s, [field]: v } : s)));
   };
 
