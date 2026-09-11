@@ -466,7 +466,10 @@ export function searchAll(query: string): SearchHit[] {
       if (score > 0) hits.push({ taskId: t.id, title: t.title, course: t.course, start: s.start, end: s.end, text: s.text, zh: s.zh, score });
     }
   }
-  return hits.sort((a, b) => b.score - a.score).slice(0, 50).map(({ score: _s, ...h }) => h);
+  return hits
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 50)
+    .map((h) => ({ taskId: h.taskId, title: h.title, course: h.course, start: h.start, end: h.end, text: h.text, zh: h.zh }));
 }
 
 /** 跨课程问答的语料检索（词法打分，本地零依赖）：返回最相关的若干句上下文 */
