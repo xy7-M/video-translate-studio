@@ -2,40 +2,50 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 蓝黑极客风 */
+/* 乔布斯美学 · 深色 Apple 风
+   原则：近黑背景、单一蓝色焦点、发丝级描边、大圆角、克制的光影 */
 :root {
-  --bg: #070b14;
-  --bg-2: #0b1220;
-  --panel: #0e1728;
-  --line: #1c2a44;
-  --line-2: #2b3f63;
-  --text: #dbe6f5;
-  --muted: #7286a3;
-  --accent: #38bdf8;
-  --accent-2: #6366f1;
-  --ok: #34d399;
-  --warn: #fbbf24;
-  --err: #f87171;
+  --bg: #050506;
+  --bg-2: #101013;
+  --panel: #17171a;
+  --line: #2a2a2e;
+  --line-2: #3f3f45;
+  --text: #f5f5f7;
+  --muted: #86868b;
+  --accent: #2997ff;
+  --accent-2: #0a84ff;
+  --ok: #30d158;
+  --warn: #ffd60a;
+  --err: #ff453a;
 }
 
 body {
   color: var(--text);
   background:
-    radial-gradient(1200px 600px at 80% -10%, rgba(56, 189, 248, 0.08), transparent 60%),
-    radial-gradient(900px 500px at -10% 110%, rgba(99, 102, 241, 0.08), transparent 60%),
+    radial-gradient(1100px 700px at 50% -15%, rgba(41, 151, 255, 0.09), transparent 60%),
     var(--bg);
-  font-family: var(--font-geist-sans), "Microsoft YaHei", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display",
+    "PingFang SC", "Microsoft YaHei", sans-serif;
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.01em;
+}
+
+::selection {
+  background: rgba(41, 151, 255, 0.35);
+  color: #fff;
 }
 
 .mono {
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-family: var(--font-geist-mono), ui-monospace, "SF Mono", monospace;
+  letter-spacing: 0;
 }
 
 .panel {
-  background: var(--panel);
+  background: linear-gradient(180deg, #1c1c1f 0%, var(--panel) 100%);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 18px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
 }
 
 /* 拖拽上传区：覆盖 .panel 的实线，恢复虚线 */
@@ -44,30 +54,42 @@ body {
 }
 
 .glow-border {
-  border: 1px solid var(--line-2);
-  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.06), 0 8px 40px rgba(2, 6, 18, 0.6);
+  border-color: var(--line-2);
+  box-shadow: 0 0 0 1px rgba(41, 151, 255, 0.05), 0 16px 60px rgba(0, 0, 0, 0.55);
 }
 
+/* Apple 胶囊按钮：纯色、无渐变、大圆角 */
 .btn-primary {
-  @apply px-5 py-2.5 rounded-lg font-medium transition-colors duration-150;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  color: #04070d;
+  @apply px-6 py-2.5 rounded-full font-medium transition-all duration-200;
+  background: var(--accent);
+  color: #fff;
 }
 .btn-primary:hover {
-  filter: brightness(1.12);
+  background: #47a9ff;
+  transform: translateY(-1px);
+}
+.btn-primary:active {
+  transform: translateY(0) scale(0.98);
 }
 .btn-primary:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+  transform: none;
 }
 
 .btn-ghost {
-  @apply px-5 py-2.5 rounded-lg font-medium transition-colors duration-150;
+  @apply px-6 py-2.5 rounded-full font-medium transition-all duration-200;
   border: 1px solid var(--line-2);
   color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
 }
 .btn-ghost:hover {
-  background: rgba(56, 189, 248, 0.08);
+  background: rgba(255, 255, 255, 0.09);
+  border-color: var(--muted);
+}
+.btn-ghost:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 ::-webkit-scrollbar {

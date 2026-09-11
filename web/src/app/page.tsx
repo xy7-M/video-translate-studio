@@ -88,10 +88,9 @@ export default function Home() {
     setSegs((prev) => prev.map((s, n) => (n === i ? { ...s, [field]: v } : s)));
   };
 
-  /** 导出字幕：先把当前编辑同步到后端，再由后端统一生成各格式 */
-  const downloadSub = async (fmt: "srt" | "vtt" | "ass" | "assfancy") => {
+  /** 导出双语 SRT：有编辑时先同步到后端，保证导出内容与界面一致 */
+  const downloadSrt = async () => {
     if (!task) return;
-    // 有编辑时先同步到后端，保证导出内容与界面一致
     if (editedRef.current) {
       await fetch(`/api/segments/${task.id}`, {
         method: "POST",
@@ -99,14 +98,13 @@ export default function Home() {
         body: JSON.stringify({ segments: segs }),
       }).catch(() => {});
     }
-    const ext = fmt === "assfancy" ? "ass" : fmt;
     const a = document.createElement("a");
-    a.href = `/api/subtitle/${task.id}?fmt=${fmt}`;
-    a.download = `subtitle-${task.id}.${ext}`;
+    a.href = `/api/subtitle/${task.id}`;
+    a.download = `subtitle-${task.id}.srt`;
     a.click();
   };
 
-  const pushEditsAndBurn = async (style: "classic" | "fancy" = "classic") => {
+  const pushEditsAndBurn = async () => {
     if (!task) return;
     setBurning(true);
     // 先把编辑同步到后端，再触发烧录
@@ -117,11 +115,7 @@ export default function Home() {
         body: JSON.stringify({ segments: segs }),
       }).catch(() => {});
     }
-    await fetch(`/api/burn/${task.id}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ style }),
-    }).catch(() => {});
+    await fetch(`/api/burn/${task.id}`, { method: "POST" }).catch(() => {});
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
       const r = await fetch(`/api/status/${task.id}`);
@@ -155,7 +149,7 @@ export default function Home() {
       {!task && (
         <div
           className={`panel dashed glow-border p-14 text-center cursor-pointer transition-colors duration-150 ${
-            drag ? "border-[var(--accent)] bg-[rgba(56,189,248,0.05)]" : ""
+            drag ? "border-[var(--accent)] bg-[rgba(41,151,255,0.06)]" : ""
           }`}
           onClick={() => inputRef.current?.click()}
           onDragOver={(e) => (e.preventDefault(), setDrag(true))}
@@ -252,45 +246,19 @@ export default function Home() {
                 </p>
               </div>
 
-              {/* 导出四宫格 */}
+              {/* 导出 + 烧录 */}
               <div>
-                <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest mb-2">导出字幕</p>
-                <div className="grid grid-cols-4 gap-2">
-                  <button className="btn-primary !px-2 !py-2.5 text-sm" onClick={() => downloadSub("srt")}>
-                    SRT
-                  </button>
-                  <button className="btn-ghost !px-2 !py-2.5 text-sm" onClick={() => downloadSub("vtt")}>
-                    VTT
-                  </button>
-                  <button className="btn-ghost !px-2 !py-2.5 text-sm" onClick={() => downloadSub("ass")}>
-                    ASS
-                  </button>
-                  <button className="btn-ghost !px-2 !py-2.5 text-sm" onClick={() => downloadSub("assfancy")}>
-                    ASS 花字
-                  </button>
-                </div>
-                <p className="text-[11px] text-[var(--muted)] mt-2">
-                  SRT 通用 · VTT 网页播放器 · ASS 花字带描边动画，剪映/AE 可再编辑
-                </p>
-              </div>
-
-              {/* 烧录 */}
-              <div>
-                <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest mb-2">烧录进视频</p>
+                <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest mb-2">导出与烧录</p>
                 <div className="flex flex-wrap gap-3">
-                  <button
-                    className="btn-ghost"
-                    disabled={burning || task.status === "burning"}
-                    onClick={() => pushEditsAndBurn("classic")}
-                  >
-                    🎬 经典双语
+                  <button className="btn-primary" onClick={downloadSrt}>
+                    ⬇ 下载双语 SRT
                   </button>
                   <button
                     className="btn-ghost"
                     disabled={burning || task.status === "burning"}
-                    onClick={() => pushEditsAndBurn("fancy")}
+                    onClick={pushEditsAndBurn}
                   >
-                    ✨ 花字版
+                    🎬 烧录双语视频
                   </button>
                   <button className="btn-ghost" onClick={() => setTask(null)}>
                     下一个视频
@@ -323,7 +291,7 @@ export default function Home() {
             </div>
             <div className="max-h-[420px] overflow-y-auto divide-y divide-[var(--line)]">
               {segs.map((s, i) => (
-                <div key={i} className="grid grid-cols-[70px_1fr_1fr] items-start hover:bg-[rgba(56,189,248,0.03)]">
+                <div key={i} className="grid grid-cols-[70px_1fr_1fr] items-start hover:bg-[rgba(41,151,255,0.04)]">
                   <div className="p-3 mono text-xs text-[var(--muted)]">{fmt(s.start)}</div>
                   <textarea
                     className="bg-transparent p-3 text-sm resize-none outline-none border-l border-[var(--line)] focus:bg-[var(--bg-2)] min-h-[44px]"
