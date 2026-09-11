@@ -1,0 +1,23 @@
+# 依赖与构建产物
+node_modules/
+.next/
+out/
+
+# 环境变量与密钥（安全第一：绝不上传）
+.env
+.env.local
+.env.*.local
+
+# 用户上传与处理产物（含隐私视频）
+.data/
+uploads/
+
+# Python 虚拟环境与模型缓存
+pyenv/
+__pycache__/
+*.pyc
+.hf_cache/
+
+# 其他
+.DS_Store
+*.log
