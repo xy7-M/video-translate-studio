@@ -30,7 +30,7 @@ const fmtClock = (sec: number) => {
   const s = Math.floor(sec % 60);
   return `${m}:${String(s).padStart(2, "0")}`;
 };
-const fmtDate = (ts: number) => new Date(ts).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
+const fmtDate = (ts: number) => (ts ? new Date(ts).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" }) : "—");
 
 /** 课程库：Channels 归档 + 全文搜索 + AI 跨课程问答（借鉴 Otter / Notta） */
 export default function Library({ onOpen }: { onOpen: (taskId: string) => void }) {
@@ -231,7 +231,7 @@ export default function Library({ onOpen }: { onOpen: (taskId: string) => void }
                     {h.title || h.taskId} · {fmtClock(h.start)}
                   </p>
                   <p className="text-sm truncate">{h.text}</p>
-                  {h.zh && <p className="text-sm text-[var(--accent)] truncate">{h.zh}</p>}
+                  {h.zh && <p className="text-sm text-[var(--muted)] truncate">{h.zh}</p>}
                 </button>
               ))}
             </div>
@@ -277,7 +277,7 @@ export default function Library({ onOpen }: { onOpen: (taskId: string) => void }
                 <div
                   className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap leading-relaxed ${
                     m.role === "user"
-                      ? "bg-[var(--accent)] text-white"
+                      ? "bg-[var(--note)] border-[1.5px] border-[var(--line)] text-[var(--text)] shadow-[3px_3px_0_rgba(28,25,17,0.16)]"
                       : "bg-[var(--bg-2)] border border-[var(--line)] text-[var(--text)]"
                   }`}
                 >
