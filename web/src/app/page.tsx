@@ -213,7 +213,7 @@ export default function Home() {
       {!task && (
         <div
           className={`panel dashed glow-border p-14 text-center cursor-pointer transition-colors duration-150 ${
-            drag ? "border-[var(--accent)] bg-[rgba(41,151,255,0.06)]" : ""
+            drag ? "border-[var(--accent)] bg-[rgba(232,99,74,0.06)]" : ""
           }`}
           onClick={() => inputRef.current?.click()}
           onDragOver={(e) => (e.preventDefault(), setDrag(true))}
@@ -247,7 +247,7 @@ export default function Home() {
           </div>
           <div className="h-2 rounded-full bg-[var(--bg-2)] overflow-hidden mb-8">
             <div
-              className="h-full bg-gradient-to-r from-[var(--accent)] to-[var(--accent-2)] transition-all duration-500"
+              className="h-full bg-[var(--accent)] transition-all duration-500"
               style={{ width: `${task.progress}%` }}
             />
           </div>
@@ -431,7 +431,7 @@ export default function Home() {
             </div>
             <div className="max-h-[420px] overflow-y-auto divide-y divide-[var(--line)]">
               {segs.map((s, i) => (
-                <div key={i} className="grid grid-cols-[70px_1fr_1fr] items-start hover:bg-[rgba(41,151,255,0.04)]">
+                <div key={i} className="grid grid-cols-[70px_1fr_1fr] items-start hover:bg-[rgba(232,99,74,0.05)]">
                   <div className="p-3 mono text-xs text-[var(--muted)]">{fmt(s.start)}</div>
                   <textarea
                     className="bg-transparent p-3 text-sm resize-none outline-none border-l border-[var(--line)] focus:bg-[var(--bg-2)] min-h-[44px]"

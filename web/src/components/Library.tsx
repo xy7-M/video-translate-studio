@@ -148,7 +148,7 @@ export default function Library({ onOpen }: { onOpen: (taskId: string) => void }
             <button
               onClick={() => setActiveCourse("")}
               className={`w-full text-left px-3 py-2 rounded-xl text-sm mb-1 transition-colors duration-150 ${
-                !activeCourse ? "bg-[rgba(41,151,255,0.12)] text-[var(--accent)]" : "text-[var(--text)] hover:bg-white/5"
+                !activeCourse ? "bg-[rgba(232,99,74,0.1)] text-[var(--accent)]" : "text-[var(--text)] hover:bg-[rgba(28,25,17,0.05)]"
               }`}
             >
               全部 <span className="text-[var(--muted)] text-xs">{tasks.length}</span>
@@ -158,7 +158,7 @@ export default function Library({ onOpen }: { onOpen: (taskId: string) => void }
                 key={c}
                 onClick={() => setActiveCourse(c)}
                 className={`w-full text-left px-3 py-2 rounded-xl text-sm mb-1 transition-colors duration-150 ${
-                  activeCourse === c ? "bg-[rgba(41,151,255,0.12)] text-[var(--accent)]" : "text-[var(--text)] hover:bg-white/5"
+                  activeCourse === c ? "bg-[rgba(232,99,74,0.1)] text-[var(--accent)]" : "text-[var(--text)] hover:bg-[rgba(28,25,17,0.05)]"
                 }`}
               >
                 {c} <span className="text-[var(--muted)] text-xs">{n}</span>
@@ -224,7 +224,7 @@ export default function Library({ onOpen }: { onOpen: (taskId: string) => void }
                 <button
                   key={i}
                   onClick={() => onOpen(h.taskId)}
-                  className="w-full text-left px-5 py-4 border-b border-[var(--line)] last:border-b-0 hover:bg-[rgba(41,151,255,0.04)] transition-colors duration-150"
+                  className="w-full text-left px-5 py-4 border-b border-[var(--line)] last:border-b-0 hover:bg-[rgba(232,99,74,0.05)] transition-colors duration-150"
                 >
                   <p className="text-xs mono text-[var(--muted)] mb-1">
                     {h.course ? `${h.course} · ` : ""}

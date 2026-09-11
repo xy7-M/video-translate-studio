@@ -388,7 +388,7 @@ function escHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-/** 生成深色 Apple 风 HTML 复习笔记（可直接浏览器打开 / 打印成 PDF） */
+/** 生成纸墨手账风 HTML 复习笔记（可直接浏览器打开 / 打印成 PDF） */
 export function buildNotesHtml(taskId: string): string {
   const t = getTask(taskId);
   if (!t || !t.segments) throw new Error("segments missing");
@@ -404,27 +404,27 @@ export function buildNotesHtml(taskId: string): string {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escHtml(t.title || "课堂笔记")} · 视频快译</title>
 <style>
-:root{--bg:#050506;--panel:#17171a;--line:#2a2a2e;--text:#f5f5f7;--muted:#86868b;--accent:#2997ff}
+:root{--bg:#f5f0e8;--panel:#faf6ef;--line:#1c1911;--muted:#7a7468;--text:#1c1911;--accent:#e8634a;--note:#fbe8a6}
 *{box-sizing:border-box}
-body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","PingFang SC","Microsoft YaHei",sans-serif;margin:0;padding:48px 24px;-webkit-font-smoothing:antialiased}
+body{background:radial-gradient(#e4dccb 1px,transparent 1.5px) 0 0/26px 26px,var(--bg);color:var(--text);font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;margin:0;padding:48px 24px;line-height:1.6}
 .wrap{max-width:820px;margin:0 auto}
-h1{font-size:32px;letter-spacing:-.02em;margin:0 0 8px}
+h1{font-family:"Kaiti SC","STKaiti","KaiTi",serif;font-size:32px;margin:0 0 8px}
 .meta{color:var(--muted);font-size:14px;margin-bottom:36px}
-h2{font-size:20px;margin:36px 0 14px;letter-spacing:-.01em}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:22px 26px;margin-bottom:18px}
+h2{font-family:"Kaiti SC","STKaiti","KaiTi",serif;font-size:20px;margin:36px 0 14px}
+.card{background:var(--panel);border:1.5px solid var(--line);border-radius:16px;padding:22px 26px;margin-bottom:18px;box-shadow:3px 4px 0 rgba(28,25,17,.16)}
 ul{margin:0;padding-left:20px;line-height:1.8}
-.card.warn{border-color:rgba(255,214,10,.35)}
+.card.warn{background:var(--note)}
 table{width:100%;border-collapse:collapse;font-size:14px}
-th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}
+th,td{text-align:left;padding:10px 12px;border-bottom:1.5px solid rgba(28,25,17,.18)}
 th{color:var(--muted);font-weight:500}
-td.en{color:var(--accent);font-family:ui-monospace,"SF Mono",monospace}
+td.en{color:var(--accent);font-family:ui-monospace,monospace}
 td.note{color:var(--muted)}
-.seg{display:flex;gap:14px;padding:10px 0;border-bottom:1px solid var(--line)}
+.seg{display:flex;gap:14px;padding:10px 0;border-bottom:1.5px solid rgba(28,25,17,.12)}
 .ts{color:var(--muted);font-family:ui-monospace,monospace;font-size:12px;min-width:52px;padding-top:3px}
 .en{margin:0;line-height:1.6}
 .zh{margin:4px 0 0;color:var(--accent);line-height:1.6;font-size:14px}
 footer{margin-top:48px;color:var(--muted);font-size:12px;text-align:center}
-@media print{body{background:#fff;color:#111}.card{border-color:#ddd;background:#fafafa}.zh{color:#06c}.ts{color:#888}}
+@media print{body{background:#fff}.card{box-shadow:none}}
 </style></head><body><div class="wrap">
 <h1>${escHtml(t.title || `视频 ${t.id}`)}</h1>
 <p class="meta">课程：${escHtml(t.course || "未分类")} ｜ ${date} ｜ ${t.segments.length} 句转录</p>
