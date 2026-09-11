@@ -34,11 +34,15 @@ export const DATA_DIR = path.join(ROOT, ".data");
 export const UPLOAD_DIR = path.join(DATA_DIR, "uploads");
 export const WORK_DIR = path.join(DATA_DIR, "work");
 export const OUT_DIR = path.join(DATA_DIR, "out");
+const TASK_DIR = path.join(DATA_DIR, "tasks");
 export const MODEL_SIZE = process.env.WHISPER_MODEL || "small";
 
-for (const d of [UPLOAD_DIR, WORK_DIR, OUT_DIR]) fs.mkdirSync(d, { recursive: true });
+for (const d of [UPLOAD_DIR, WORK_DIR, OUT_DIR, TASK_DIR]) fs.mkdirSync(d, { recursive: true });
 
-const store = new Map<string, Task>();
+// 任务持久化到磁盘：dev 模式下 Next.js 热重编译会清空模块级内存，必须落盘
+function taskPath(id: string) {
+  return path.join(TASK_DIR, `${id}.json`);
+}
 
 export function newTask(videoFile: string): Task {
   const t: Task = {
@@ -49,17 +53,26 @@ export function newTask(videoFile: string): Task {
     videoFile,
     createdAt: Date.now(),
   };
-  store.set(t.id, t);
+  fs.writeFileSync(taskPath(t.id), JSON.stringify(t));
   return t;
 }
 
-export function getTask(id: string) {
-  return store.get(id);
+export function getTask(id: string): Task | undefined {
+  const p = taskPath(id);
+  if (!fs.existsSync(p)) return undefined;
+  try {
+    return JSON.parse(fs.readFileSync(p, "utf-8")) as Task;
+  } catch {
+    return undefined;
+  }
 }
 
 export function updateTask(id: string, patch: Partial<Task>) {
-  const t = store.get(id);
-  if (t) Object.assign(t, patch);
+  const t = getTask(id);
+  if (t) {
+    Object.assign(t, patch);
+    fs.writeFileSync(taskPath(id), JSON.stringify(t));
+  }
   return t;
 }
 
@@ -219,10 +232,10 @@ export async function burnSubtitles(taskId: string) {
   updateTask(taskId, { status: "burning", progress: 95, message: "正在烧录字幕视频…" });
 
   const out = path.join(OUT_DIR, `${t.id}.subtitled.mp4`);
-  // Windows + ffmpeg9：必须 filename='...' 显式命名，正斜杠路径 + 转义盘符冒号（c\:/），
+  // Windows + ffmpeg9：必须 filename='...' 显式命名，正斜杠路径 + 转义盘符冒号（C\:/），
   // 否则 "C:" 会被当作 original_size 选项解析失败
-  const fwd = srt.replace(/\\/g, "/");
-  const escaped = `${fwd.slice(0, 2)}\\:${fwd.slice(2)}`.replace(/'/g, "\\'");
+  const fwd = srt.replace(/\\/g, "/"); // "C:/Users/..."
+  const escaped = `${fwd.slice(0, 1)}\\:${fwd.slice(2)}`.replace(/'/g, "\\'"); // "C\:/Users/..."
   const style =
     "FontName=Microsoft YaHei,FontSize=13,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000," +
     "BorderStyle=1,Outline=1.5,Shadow=0.5,Alignment=2,MarginV=60";

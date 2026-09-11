@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { burnSubtitles, getTask } from "@/lib/pipeline";
+import { burnSubtitles, getTask, updateTask } from "@/lib/pipeline";
 
 export const runtime = "nodejs";
 export const maxDuration = 600;

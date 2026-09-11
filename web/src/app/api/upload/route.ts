@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
-import { UPLOAD_DIR, newTask, runPipeline } from "@/lib/pipeline";
+import { UPLOAD_DIR, newTask, updateTask, runPipeline } from "@/lib/pipeline";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -27,6 +27,7 @@ export async function POST(req: Request) {
   const buf = Buffer.from(await file.arrayBuffer());
   fs.writeFileSync(dest, buf);
   task.videoFile = dest;
+  updateTask(task.id, { videoFile: dest });
 
   // fire-and-forget：后台跑管线，前端轮询状态
   void runPipeline(task.id);
