@@ -35,6 +35,8 @@ export default function Home() {
   const [drag, setDrag] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [burning, setBurning] = useState(false);
+  const [pdfing, setPdfing] = useState(false);
+  const [pdfErr, setPdfErr] = useState("");
   const [segs, setSegs] = useState<Segment[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval>>();
@@ -98,7 +100,7 @@ export default function Home() {
   };
 
   /** 导出双语 SRT：有编辑时先同步到后端，保证导出内容与界面一致 */
-  const downloadSrt = async () => {
+  const syncEdits = async () => {
     if (!task) return;
     if (editedRef.current) {
       await fetch(`/api/segments/${task.id}`, {
@@ -107,10 +109,40 @@ export default function Home() {
         body: JSON.stringify({ segments: segs }),
       }).catch(() => {});
     }
+  };
+
+  const downloadSrt = async () => {
+    if (!task) return;
+    await syncEdits();
     const a = document.createElement("a");
     a.href = `/api/subtitle/${task.id}`;
     a.download = `subtitle-${task.id}.srt`;
     a.click();
+  };
+
+  /** 导出奶油风（纸墨手账）PDF 字幕 */
+  const downloadPdf = async () => {
+    if (!task) return;
+    setPdfing(true);
+    try {
+      await syncEdits();
+      const r = await fetch(`/api/subtitle/${task.id}?fmt=pdf`);
+      if (!r.ok) {
+        const j = await r.json().catch(() => null);
+        throw new Error(j?.error || `PDF 生成失败 (${r.status})`);
+      }
+      const blob = await r.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `subtitle-${task.title || task.id}.pdf`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) {
+      setPdfErr(e instanceof Error ? e.message : String(e));
+      setTimeout(() => setPdfErr(""), 5000);
+    } finally {
+      setPdfing(false);
+    }
   };
 
   const pushEditsAndBurn = async () => {
@@ -289,7 +321,7 @@ export default function Home() {
         <div className="space-y-6">
           <div className="grid md:grid-cols-[280px_1fr] gap-6">
             {/* Player */}
-            <div className="panel overflow-hidden">
+            <div className="panel overflow-hidden self-start">
               <video
                 key={task.status === "done" ? "burned" : "src"}
                 controls
@@ -329,6 +361,10 @@ export default function Home() {
                   <button className="btn-primary" onClick={downloadSrt}>
                     ⬇ 下载双语 SRT
                   </button>
+                  <button className="btn-ghost" onClick={downloadPdf} disabled={pdfing}>
+                    {pdfing ? "🍦 PDF 生成中…" : "🍦 奶油风 PDF"}
+                  </button>
+                  {pdfErr && <p className="w-full text-xs" style={{ color: "var(--err)" }}>{pdfErr}</p>}
                   <button className="btn-ghost" onClick={() => downloadNotes("md")}>
                     📝 复习笔记 MD
                   </button>
@@ -350,7 +386,7 @@ export default function Home() {
 
               {task.status === "done" && (
                 <div className="flex items-center gap-4">
-                  <a href={`/api/video/${task.id}/burned`} className="text-sm text-[var(--ok)] mono" download>
+                  <a href={`/api/video/${task.id}/burned`} className="text-sm text-[var(--ok)] underline underline-offset-4" download>
                     ⬇ 下载烧录版 mp4
                   </a>
                   {task.encoder && (
@@ -406,7 +442,7 @@ export default function Home() {
                   <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest mb-4">
                     专业词表 · {task.glossary.length} 个术语
                   </p>
-                  <div className="max-h-[340px] overflow-y-auto divide-y divide-[var(--line)]">
+                  <div className="max-h-[340px] overflow-y-auto divide-y divide-[var(--line)] pb-3">
                     {task.glossary.map((g, i) => (
                       <div key={i} className="py-3 flex flex-col gap-0.5">
                         <p className="text-sm">
@@ -440,7 +476,7 @@ export default function Home() {
                     onChange={(e) => editSeg(i, "text", e.target.value)}
                   />
                   <textarea
-                    className="bg-transparent p-3 text-sm resize-none outline-none border-l border-[var(--line)] text-[var(--accent)] focus:bg-[var(--bg-2)] min-h-[44px]"
+                    className="bg-transparent p-3 text-sm resize-none outline-none border-l border-[var(--line)] focus:bg-[var(--bg-2)] min-h-[44px]"
                     rows={2}
                     value={s.zh || ""}
                     onChange={(e) => editSeg(i, "zh", e.target.value)}

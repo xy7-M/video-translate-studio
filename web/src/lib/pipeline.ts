@@ -510,3 +510,108 @@ export async function runPipeline(taskId: string) {
     updateTask(taskId, { status: "error", error: e instanceof Error ? e.message : String(e), message: "处理失败" });
   }
 }
+
+/* ─────────────────────────────────────────────────────────
+ * 奶油风（纸墨手账）字幕 PDF 导出
+ * ───────────────────────────────────────────────────────── */
+
+function esc(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** 双语字幕的纸墨手账风 HTML（与全站奶油风一致：点阵纸纹/墨线描边/硬边投影/贴纸倾斜） */
+export function buildSubtitleHtml(taskId: string): string {
+  const t = getTask(taskId);
+  if (!t || !t.segments) throw new Error("segments missing");
+  const date = new Date(t.createdAt).toLocaleDateString("zh-CN");
+  const rows = t.segments
+    .map(
+      (s, i) => `
+<div class="seg ${i % 2 ? "tilt-r" : "tilt-l"}">
+  <span class="no mono">${String(i + 1).padStart(2, "0")}</span>
+  <span class="ts mono">${fmtClock(s.start)} → ${fmtClock(s.end)}</span>
+  <div class="tx">
+    <p class="en">${esc(s.text)}</p>
+    <p class="zh">${esc(s.zh || "")}</p>
+  </div>
+</div>`
+    )
+    .join("");
+
+  return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<title>${esc(t.title || `视频 ${t.id}`)} · 双语字幕</title>
+<style>
+:root{--bg:#F5F0E8;--panel:#FAF6EF;--line:#1C1911;--muted:#7A7468;--text:#1C1911;--accent:#E8634A;--green:#6B9E7A;--note:#FBE8A6}
+@page{size:A4;margin:14mm}
+*{box-sizing:border-box}
+body{background:radial-gradient(#E4DCCB 1px,transparent 1.5px) 0 0/26px 26px,var(--bg);color:var(--text);font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;margin:0;padding:36px 28px;line-height:1.6}
+.wrap{max-width:760px;margin:0 auto}
+h1{font-family:"Kaiti SC","STKaiti","KaiTi",serif;font-size:30px;margin:0 0 6px}
+.meta{color:var(--muted);font-size:13px;margin-bottom:28px}
+.badge{display:inline-block;background:var(--note);border:1.5px solid var(--line);border-radius:999px;padding:3px 14px;font-size:12px;box-shadow:3px 4px 0 rgba(28,25,17,.16);margin-bottom:18px}
+.seg{display:flex;gap:14px;background:var(--panel);border:1.5px solid var(--line);border-radius:16px;padding:14px 18px;margin-bottom:14px;box-shadow:3px 4px 0 rgba(28,25,17,.16);break-inside:avoid}
+.seg.tilt-l{transform:rotate(-0.6deg)}
+.seg.tilt-r{transform:rotate(0.5deg)}
+.no{color:#fff;background:var(--accent);border-radius:8px;min-width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;align-self:center;border:1.5px solid var(--line)}
+.ts{color:var(--muted);font-size:11px;min-width:96px;padding-top:6px;flex-shrink:0}
+.mono{font-family:ui-monospace,Consolas,monospace}
+.en{margin:0;font-size:15px;line-height:1.55}
+.zh{margin:4px 0 0;color:var(--green);font-size:14px;font-weight:600}
+footer{margin-top:36px;color:var(--muted);font-size:12px;text-align:center}
+@media print{body{padding:0}.seg{box-shadow:2px 3px 0 rgba(28,25,17,.14)}}
+</style></head><body><div class="wrap">
+<h1>📽️ ${esc(t.title || `视频 ${t.id}`)}</h1>
+<p class="meta">课程：${esc(t.course || "未分类")} ｜ ${date} ｜ 共 ${t.segments.length} 句双语字幕</p>
+<span class="badge">✂️ 视频快译 · 中英双语字幕</span>
+${rows}
+<footer>由「视频快译」自动生成 · 纸墨手账风 · 本地处理</footer>
+</div></body></html>`;
+}
+
+function findChrome(): string | null {
+  const cands = [
+    process.env.CHROME_BIN,
+    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+    path.join(process.env.LOCALAPPDATA || "", "Google\\Chrome\\Application\\chrome.exe"),
+    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+    "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+  ].filter(Boolean) as string[];
+  for (const c of cands) if (fs.existsSync(c)) return c;
+  return null;
+}
+
+/** 用本机 Chrome/Edge headless 把 HTML 打印成 PDF（零依赖，样式与奶油风 100% 一致） */
+export async function htmlToPdf(html: string, nameHint: string): Promise<Buffer> {
+  const chrome = findChrome();
+  if (!chrome) throw new Error("未找到 Chrome/Edge，无法生成 PDF");
+
+  const tmpHtml = path.join(WORK_DIR, `${nameHint}.pdfsrc.html`);
+  const tmpPdf = path.join(WORK_DIR, `${nameHint}.pdfout.pdf`);
+  const tmpProfile = path.join(WORK_DIR, `${nameHint}.chrome-profile`);
+  fs.writeFileSync(tmpHtml, html, "utf-8");
+  fs.rmSync(tmpPdf, { force: true });
+
+  const url = "file:///" + tmpHtml.replace(/\\/g, "/");
+  try {
+    // 独立 user-data-dir：防止已运行的 Chrome 实例接管进程而不输出文件
+    await run(chrome, [
+      "--headless=new",
+      "--disable-gpu",
+      "--no-sandbox",
+      `--user-data-dir=${tmpProfile}`,
+      `--print-to-pdf=${tmpPdf}`,
+      "--no-pdf-header-footer",
+      "--virtual-time-budget=8000",
+      url,
+    ], { timeoutMs: 60 * 1000 });
+  } finally {
+    fs.rmSync(tmpHtml, { force: true });
+    fs.rmSync(tmpProfile, { recursive: true, force: true });
+  }
+
+  if (!fs.existsSync(tmpPdf)) throw new Error("PDF 生成失败（Chrome 未输出文件）");
+  const buf = fs.readFileSync(tmpPdf);
+  fs.rmSync(tmpPdf, { force: true });
+  return buf;
+}
