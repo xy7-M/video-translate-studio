@@ -473,6 +473,21 @@ ${glossRows ? `<h2>专业词表</h2><div class="card"><table><tr><th>英文术�
 </div></body></html>`;
 }
 
+/**
+ * 中英文混合分词：英文按空格取词（≥2 字符），中文取相邻二字组合（bigram）。
+ * 「作业什么时候交」→ 作业/业什/什么/么时/时候/候交，可匹配转录里的中文译文。
+ */
+export function tokenize(q: string): string[] {
+  const s = q.toLowerCase();
+  const terms = new Set<string>();
+  for (const w of s.match(/[a-z0-9'’]{2,}/g) || []) terms.add(w);
+  for (const run of s.match(/[\u4e00-\u9fff]+/g) || []) {
+    if (run.length === 1) terms.add(run);
+    for (let i = 0; i + 1 < run.length; i++) terms.add(run.slice(i, i + 2));
+  }
+  return Array.from(terms);
+}
+
 /** 全文搜索：跨所有任务的转录文本 / 中文译文 / 摘要 / 课程名，命中定位到句级时间戳 */
 export type SearchHit = {
   taskId: string;
@@ -485,9 +500,8 @@ export type SearchHit = {
 };
 
 export function searchAll(query: string): SearchHit[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return [];
-  const terms = q.split(/\s+/).filter(Boolean);
+  const terms = tokenize(query);
+  if (!terms.length) return [];
   const hits: (SearchHit & { score: number })[] = [];
   for (const t of listTasks()) {
     if (!t.segments) continue;
@@ -508,9 +522,9 @@ export function searchAll(query: string): SearchHit[] {
     .map((h) => ({ taskId: h.taskId, title: h.title, course: h.course, start: h.start, end: h.end, text: h.text, zh: h.zh }));
 }
 
-/** 跨课程问答的语料检索（词法打分，本地零依赖）：返回最相关的若干句上下文 */
+/** 跨课程问答的语料检索（中英混合分词打分，本地零依赖）：返回最相关的若干句上下文 */
 export function retrieveCorpus(query: string, course?: string): string {
-  const terms = query.toLowerCase().split(/\s+/).filter((w) => w.length > 1);
+  const terms = tokenize(query);
   const scored: { text: string; score: number; taskId: string; title?: string }[] = [];
   for (const t of listTasks()) {
     if (course && t.course !== course) continue;
