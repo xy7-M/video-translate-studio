@@ -483,11 +483,11 @@ export default function Home() {
                 </div>
               )}
               {task.glossary && task.glossary.length > 0 && (
-                <div className="panel p-6">
+                <div className="panel p-6 flex flex-col">
                   <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest mb-4">
                     专业词表 · {task.glossary.length} 个术语
                   </p>
-                  <div className="max-h-[340px] overflow-y-auto divide-y divide-[var(--hair)] pb-3">
+                  <div className="flex-1 flex flex-col justify-between divide-y divide-[var(--hair)]">
                     {task.glossary.map((g, i) => (
                       <div key={i} className="py-3 flex flex-col gap-0.5">
                         <p className="text-sm">
