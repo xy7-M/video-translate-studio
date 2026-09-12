@@ -1,7 +1,24 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  AlertTriangle,
+  Check,
+  Clapperboard,
+  Download,
+  FileDown,
+  FileText,
+  ListChecks,
+  Printer,
+  Sparkles,
+  Square,
+  Upload,
+  Zap,
+} from "lucide-react";
 import Library from "@/components/Library";
+
+/** 墨线细描边图标：与手账风 1.5px 描边同语言 */
+const ic = { size: 15, strokeWidth: 1.75, className: "shrink-0" } as const;
 
 type Segment = { start: number; end: number; text: string; zh?: string };
 type Summary = { points: string[]; emphasis: string[]; actions: string[] };
@@ -264,7 +281,9 @@ export default function Home() {
             className="hidden"
             onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
           />
-          <div className="text-5xl mb-4 mono text-[var(--accent)]">⇪</div>
+          <div className="flex justify-center mb-4 text-[var(--accent)]">
+            <Upload size={40} strokeWidth={1.5} />
+          </div>
           <p className="text-lg font-medium">{uploading ? "上传中…" : "拖入或点击选择英文视频"}</p>
           <p className="text-sm text-[var(--muted)] mt-2">支持 MP4 / MOV / MKV / WebM · ≤ 2GB · 最长 2 小时</p>
         </div>
@@ -295,7 +314,7 @@ export default function Home() {
                         : "border border-[var(--line-2)] text-[var(--muted)]"
                   }`}
                 >
-                  {i < stepIndex ? "✓" : i + 1}
+                  {i < stepIndex ? <Check size={13} strokeWidth={2.5} /> : i + 1}
                 </span>
                 <span className={i === stepIndex ? "text-[var(--text)] font-medium" : "text-[var(--muted)]"}>{s}</span>
               </li>
@@ -336,7 +355,10 @@ export default function Home() {
             {/* Actions */}
             <div className="panel p-6 flex flex-col gap-5">
               <div>
-                <p className="font-medium">{task.title || "本视频"} · 双语字幕已生成 ✓</p>
+                <p className="font-medium inline-flex items-center gap-1.5">
+                  {task.title || "本视频"} · 双语字幕已生成
+                  <Check size={16} strokeWidth={2.5} className="text-[var(--ok)]" />
+                </p>
                 <p className="text-sm text-[var(--muted)] mt-1">
                   共 {segs.length} 句 · 可直接编辑下方文字，导出时以编辑内容为准
                 </p>
@@ -359,24 +381,24 @@ export default function Home() {
                 <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest mb-2">导出与烧录</p>
                 <div className="flex flex-wrap gap-3">
                   <button className="btn-primary" onClick={downloadSrt}>
-                    ⬇ 下载双语 SRT
+                    <Download {...ic} /> 下载双语 SRT
                   </button>
                   <button className="btn-ghost" onClick={downloadPdf} disabled={pdfing}>
-                    {pdfing ? "🍦 PDF 生成中…" : "🍦 奶油风 PDF"}
+                    <FileDown {...ic} /> {pdfing ? "PDF 生成中…" : "奶油风 PDF"}
                   </button>
                   {pdfErr && <p className="w-full text-xs" style={{ color: "var(--err)" }}>{pdfErr}</p>}
                   <button className="btn-ghost" onClick={() => downloadNotes("md")}>
-                    📝 复习笔记 MD
+                    <FileText {...ic} /> 复习笔记 MD
                   </button>
                   <button className="btn-ghost" onClick={() => downloadNotes("html")}>
-                    🖨 笔记 HTML·PDF
+                    <Printer {...ic} /> 笔记 HTML·PDF
                   </button>
                   <button
                     className="btn-ghost"
                     disabled={burning || task.status === "burning"}
                     onClick={pushEditsAndBurn}
                   >
-                    🎬 烧录双语视频
+                    <Clapperboard {...ic} /> 烧录双语视频
                   </button>
                   <button className="btn-ghost" onClick={() => setTask(null)}>
                     下一个视频
@@ -386,12 +408,19 @@ export default function Home() {
 
               {task.status === "done" && (
                 <div className="flex items-center gap-4">
-                  <a href={`/api/video/${task.id}/burned`} className="text-sm text-[var(--ok)] underline underline-offset-4" download>
-                    ⬇ 下载烧录版 mp4
+                  <a
+                    href={`/api/video/${task.id}/burned`}
+                    className="text-sm text-[var(--ok)] inline-flex items-center gap-1.5 underline underline-offset-4"
+                    download
+                  >
+                    <Download size={14} strokeWidth={1.75} /> 下载烧录版 mp4
                   </a>
                   {task.encoder && (
-                    <span className="text-[11px] mono px-2 py-1 rounded" style={{ border: "1px solid var(--line-2)", color: task.encoder === "h264_nvenc" ? "var(--warn)" : "var(--muted)" }}>
-                      {task.encoder === "h264_nvenc" ? "⚡ NVENC GPU 编码" : "CPU libx264"}
+                    <span
+                      className="text-[11px] mono inline-flex items-center gap-1 px-2 py-1 rounded-full"
+                      style={{ border: "1.5px solid var(--line)", color: task.encoder === "h264_nvenc" ? "var(--warn)" : "var(--muted)" }}
+                    >
+                      {task.encoder === "h264_nvenc" ? <><Zap size={12} strokeWidth={2} /> NVENC GPU 编码</> : "CPU libx264"}
                     </span>
                   )}
                 </div>
@@ -405,7 +434,9 @@ export default function Home() {
             <div className="grid md:grid-cols-2 gap-6">
               {task.summary && (task.summary.points.length || task.summary.emphasis.length || task.summary.actions.length) > 0 && (
                 <div className="panel p-6 space-y-5">
-                  <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest">AI 课堂摘要</p>
+                  <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest inline-flex items-center gap-1.5">
+                    <Sparkles size={13} strokeWidth={1.75} /> AI 课堂摘要
+                  </p>
                   {task.summary.points.length > 0 && (
                     <div>
                       <p className="text-sm font-medium mb-2">本节课要点</p>
@@ -416,7 +447,9 @@ export default function Home() {
                   )}
                   {task.summary.emphasis.length > 0 && (
                     <div>
-                      <p className="text-sm font-medium mb-2" style={{ color: "var(--warn)" }}>⚠️ 教授强调 / 疑似考点</p>
+                      <p className="text-sm font-medium mb-2 inline-flex items-center gap-1.5" style={{ color: "var(--warn)" }}>
+                        <AlertTriangle size={14} strokeWidth={1.75} /> 教授强调 / 疑似考点
+                      </p>
                       <ul className="space-y-1.5 text-sm text-[var(--muted)] list-disc pl-5 marker:text-[var(--warn)]">
                         {task.summary.emphasis.map((p, i) => <li key={i}>{p}</li>)}
                       </ul>
@@ -424,11 +457,13 @@ export default function Home() {
                   )}
                   {task.summary.actions.length > 0 && (
                     <div>
-                      <p className="text-sm font-medium mb-2" style={{ color: "var(--ok)" }}>✅ 待办事项</p>
+                      <p className="text-sm font-medium mb-2 inline-flex items-center gap-1.5" style={{ color: "var(--ok)" }}>
+                        <ListChecks size={14} strokeWidth={1.75} /> 待办事项
+                      </p>
                       <ul className="space-y-1.5 text-sm text-[var(--muted)]">
                         {task.summary.actions.map((p, i) => (
-                          <li key={i} className="flex gap-2">
-                            <span style={{ color: "var(--ok)" }}>☐</span>
+                          <li key={i} className="flex gap-2 items-start">
+                            <Square size={14} strokeWidth={1.75} className="mt-1 shrink-0" style={{ color: "var(--ok)" }} />
                             <span>{p}</span>
                           </li>
                         ))}

@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { BookOpen, MessageCircle, Search } from "lucide-react";
+
+const tabIc = { size: 14, strokeWidth: 1.75, className: "shrink-0" } as const;
 
 type TaskMeta = {
   id: string;
@@ -123,18 +126,19 @@ export default function Library({ onOpen }: { onOpen: (taskId: string) => void }
       <div className="flex gap-2">
         {(
           [
-            ["channels", "📚 课程频道"],
-            ["search", "🔍 全文搜索"],
-            ["chat", "💬 AI 问答"],
+            ["channels", <BookOpen key="i" {...tabIc} />, "课程频道"],
+            ["search", <Search key="i" {...tabIc} />, "全文搜索"],
+            ["chat", <MessageCircle key="i" {...tabIc} />, "AI 问答"],
           ] as const
-        ).map(([k, label]) => (
+        ).map(([k, icon, label]) => (
           <button
             key={k}
             onClick={() => setTab(k)}
-            className={`px-5 py-2 rounded-full text-sm transition-all duration-200 ${
+            className={`px-5 py-2 rounded-full text-sm transition-all duration-200 inline-flex items-center gap-1.5 ${
               tab === k ? "bg-[var(--accent)] text-white" : "text-[var(--muted)] hover:text-[var(--text)]"
             }`}
           >
+            {icon}
             {label}
           </button>
         ))}

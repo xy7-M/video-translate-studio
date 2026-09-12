@@ -75,6 +75,9 @@ h1, h2 {
 /* 按钮：墨线描边 + 硬边投影的贴纸按钮 */
 .btn-primary {
   @apply px-5 py-2.5 rounded-full font-medium transition-all duration-150;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   background: var(--accent);
   border: 1.5px solid var(--line);
   color: #fff;
@@ -100,6 +103,9 @@ h1, h2 {
 
 .btn-ghost {
   @apply px-5 py-2.5 rounded-full font-medium transition-all duration-150;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   border: 1.5px solid var(--line);
   color: var(--text);
   background: var(--panel);
