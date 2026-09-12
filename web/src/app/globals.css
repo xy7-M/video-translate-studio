@@ -31,9 +31,9 @@ body {
   min-height: 100vh;
 }
 
-/* 标题：英文 Caveat、中文楷体 */
+/* 标题：英文 Caveat（自托管）、中文楷体 */
 h1, h2 {
-  font-family: "Caveat", "Kaiti SC", "STKaiti", "KaiTi", serif;
+  font-family: var(--font-caveat), "Caveat", "Kaiti SC", "STKaiti", "KaiTi", serif;
   letter-spacing: 0.01em;
 }
 
