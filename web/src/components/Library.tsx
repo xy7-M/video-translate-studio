@@ -51,6 +51,8 @@ export default function Library({
   const [sel, setSel] = useState<string[]>([]); // 多选删除：已勾选的任务 id
   const [confirmBatch, setConfirmBatch] = useState(false);
   const [batching, setBatching] = useState(false);
+  const [editingId, setEditingId] = useState<string>(""); // 正在重命名的任务
+  const [editTitle, setEditTitle] = useState("");
 
   // search
   const [q, setQ] = useState("");
@@ -129,6 +131,20 @@ export default function Library({
       body: JSON.stringify({ id, course }),
     }).catch(() => {});
     setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, course: course.trim() } : t)));
+  };
+
+  const renameTask = async (id: string) => {
+    if (editingId !== id) return;
+    setEditingId("");
+    const next = editTitle.trim();
+    if (!next || next === (tasks.find((t) => t.id === id)?.title ?? `视频 ${id}`)) return;
+    await fetch("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, title: next }),
+    }).catch(() => {});
+    setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, title: next } : t)));
+    setHits((hs) => hs.map((h) => (h.taskId === id ? { ...h, title: next } : h)));
   };
 
   const removeTask = async (id: string) => {
@@ -290,7 +306,18 @@ export default function Library({
                   className="w-4 h-4 shrink-0 accent-[var(--accent)] cursor-pointer"
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium truncate">{t.title || `视频 ${t.id}`}</p>
+                  <input
+                    value={editingId === t.id ? editTitle : t.title || `视频 ${t.id}`}
+                    onFocus={() => {
+                      setEditingId(t.id);
+                      setEditTitle(t.title || `视频 ${t.id}`);
+                    }}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    onBlur={() => renameTask(t.id)}
+                    onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+                    aria-label="重命名视频"
+                    className="w-full font-medium bg-transparent border-b border-dashed border-transparent hover:border-[var(--line-2)] focus:border-[var(--accent)] outline-none truncate transition-colors duration-150"
+                  />
                   <p className="text-xs text-[var(--muted)] mono mt-1">
                     {fmtDate(t.createdAt)} · {t.segCount} 句 · {t.points > 0 ? `${t.points} 条要点` : "无笔记"}
                   </p>

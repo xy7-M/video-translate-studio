@@ -213,6 +213,15 @@ export default function Home() {
     }).catch(() => {});
   };
 
+  const saveTitle = async (title: string) => {
+    if (!task) return;
+    await fetch("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: task.id, title }),
+    }).catch(() => {});
+  };
+
   const downloadNotes = (fmt: "md" | "html") => {
     if (!task) return;
     const a = document.createElement("a");
@@ -365,12 +374,19 @@ export default function Home() {
             {/* Actions */}
             <div className="panel p-6 flex flex-col gap-5">
               <div>
-                <p className="font-medium inline-flex items-center gap-1.5">
-                  {task.title || "本视频"} · 双语字幕已生成
-                  <Check size={16} strokeWidth={2.5} className="text-[var(--ok)]" />
-                </p>
-                <p className="text-sm text-[var(--muted)] mt-1">
-                  共 {segs.length} 句 · 可直接编辑下方文字，导出时以编辑内容为准
+                <input
+                  value={task.title || ""}
+                  placeholder="给这个视频起个名字…"
+                  onChange={(e) => setTask((p) => p && { ...p, title: e.target.value })}
+                  onBlur={(e) => saveTitle(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+                  aria-label="自定义视频名称"
+                  className="font-medium text-lg bg-transparent w-full border-b border-dashed border-[var(--line-2)] focus:border-[var(--accent)] outline-none transition-colors duration-150 placeholder:text-[var(--muted)]"
+                />
+                <p className="text-sm text-[var(--muted)] mt-1 inline-flex items-center gap-1.5">
+                  双语字幕已生成
+                  <Check size={14} strokeWidth={2.5} className="text-[var(--ok)]" />
+                  · 共 {segs.length} 句 · 名称与文字均可编辑，导出时以编辑内容为准
                 </p>
               </div>
 
