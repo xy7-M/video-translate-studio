@@ -47,6 +47,9 @@ export default function Library({
   const [tasks, setTasks] = useState<TaskMeta[]>([]);
   const [activeCourse, setActiveCourse] = useState<string>("");
   const [confirmId, setConfirmId] = useState<string>("");
+  const [sel, setSel] = useState<string[]>([]); // 多选删除：已勾选的任务 id
+  const [confirmBatch, setConfirmBatch] = useState(false);
+  const [batching, setBatching] = useState(false);
 
   // search
   const [q, setQ] = useState("");
@@ -137,7 +140,36 @@ export default function Library({
     }
     setTasks((ts) => ts.filter((t) => t.id !== id));
     setHits((hs) => hs.filter((h) => h.taskId !== id));
+    setSel((s) => s.filter((x) => x !== id));
     onDeleted?.(id);
+  };
+
+  const toggleSel = (id: string) =>
+    setSel((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+
+  const allShownSelected = shown.length > 0 && shown.every((t) => sel.includes(t.id));
+  const toggleSelectAll = () =>
+    setSel((s) => (allShownSelected ? s.filter((id) => !shown.some((t) => t.id === id)) : Array.from(new Set([...s, ...shown.map((t) => t.id)]))));
+
+  const removeBatch = async () => {
+    setConfirmBatch(false);
+    setBatching(true);
+    const ids = [...sel];
+    const done: string[] = [];
+    for (const id of ids) {
+      try {
+        const r = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+        if (r.ok) done.push(id);
+      } catch {
+        /* 单个失败不影响其余 */
+      }
+    }
+    const set = new Set(done);
+    setTasks((ts) => ts.filter((t) => !set.has(t.id)));
+    setHits((hs) => hs.filter((h) => !set.has(h.taskId)));
+    setSel((s) => s.filter((id) => !set.has(id)));
+    done.forEach((id) => onDeleted?.(id));
+    setBatching(false);
   };
 
   return (
@@ -193,13 +225,69 @@ export default function Library({
 
           {/* Task list */}
           <div className="space-y-3">
+            {shown.length > 0 && (
+              <div className="flex items-center gap-3 px-2 text-sm">
+                <label className="flex items-center gap-2 cursor-pointer select-none text-[var(--muted)]">
+                  <input
+                    type="checkbox"
+                    checked={allShownSelected}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 accent-[var(--accent)]"
+                  />
+                  全选{activeCourse ? `「${activeCourse}」` : ""}
+                </label>
+                {sel.length > 0 && (
+                  <>
+                    <span className="text-xs mono text-[var(--muted)]">已选 {sel.length} 项</span>
+                    <button className="text-xs text-[var(--muted)] hover:text-[var(--text)] underline underline-offset-2" onClick={() => setSel([])}>
+                      清空选择
+                    </button>
+                    <span className="flex-1" />
+                    {confirmBatch ? (
+                      <span className="flex items-center gap-2">
+                        <button
+                          className="btn-ghost !px-3 !py-1.5 !text-xs"
+                          style={{ color: "var(--err)", borderColor: "var(--err)" }}
+                          onClick={removeBatch}
+                          disabled={batching}
+                        >
+                          {batching ? "删除中…" : `确认删除 ${sel.length} 项`}
+                        </button>
+                        <button className="btn-ghost !px-3 !py-1.5 !text-xs" onClick={() => setConfirmBatch(false)}>
+                          取消
+                        </button>
+                      </span>
+                    ) : (
+                      <button
+                        className="btn-ghost !px-3 !py-1.5 !text-xs"
+                        style={{ color: "var(--err)", borderColor: "var(--err)" }}
+                        onClick={() => setConfirmBatch(true)}
+                      >
+                        <Trash2 size={13} strokeWidth={1.75} /> 批量删除
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
             {shown.length === 0 && (
               <div className="panel p-10 text-center text-sm text-[var(--muted)]">
                 {tasks.length === 0 ? "课程库为空——去「工作台」导入第一个课堂视频吧" : "该频道下还没有视频"}
               </div>
             )}
             {shown.map((t) => (
-              <div key={t.id} className="panel p-5 flex items-center gap-4 hover:border-[var(--line-2)] transition-colors duration-150">
+              <div
+                key={t.id}
+                className="panel p-5 flex items-center gap-4 transition-colors duration-150"
+                style={sel.includes(t.id) ? { borderColor: "var(--accent)" } : undefined}
+              >
+                <input
+                  type="checkbox"
+                  checked={sel.includes(t.id)}
+                  onChange={() => toggleSel(t.id)}
+                  aria-label={`选择 ${t.title || t.id}`}
+                  className="w-4 h-4 shrink-0 accent-[var(--accent)] cursor-pointer"
+                />
                 <div className="flex-1 min-w-0">
                   <p className="font-medium truncate">{t.title || `视频 ${t.id}`}</p>
                   <p className="text-xs text-[var(--muted)] mono mt-1">
