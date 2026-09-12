@@ -252,7 +252,6 @@ export default function Home() {
           </button>
         </nav>
       </header>
-
       {view === "library" && (
         <Library
           onOpen={openTask}
