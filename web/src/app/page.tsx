@@ -376,7 +376,7 @@ export default function Home() {
               <div>
                 <input
                   value={task.title || ""}
-                  placeholder="给这个视频起个名字…"
+                  placeholder={`视频 ${task.id}`}
                   onChange={(e) => setTask((p) => p && { ...p, title: e.target.value })}
                   onBlur={(e) => saveTitle(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
