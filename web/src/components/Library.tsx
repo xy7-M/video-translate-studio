@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BookOpen, MessageCircle, Search } from "lucide-react";
+import { BookOpen, MessageCircle, Search, Trash2 } from "lucide-react";
 
 const tabIc = { size: 14, strokeWidth: 1.75, className: "shrink-0" } as const;
 
@@ -36,10 +36,17 @@ const fmtClock = (sec: number) => {
 const fmtDate = (ts: number) => (ts ? new Date(ts).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" }) : "—");
 
 /** 课程库：Channels 归档 + 全文搜索 + AI 跨课程问答（借鉴 Otter / Notta） */
-export default function Library({ onOpen }: { onOpen: (taskId: string) => void }) {
+export default function Library({
+  onOpen,
+  onDeleted,
+}: {
+  onOpen: (taskId: string) => void;
+  onDeleted?: (taskId: string) => void;
+}) {
   const [tab, setTab] = useState<"channels" | "search" | "chat">("channels");
   const [tasks, setTasks] = useState<TaskMeta[]>([]);
   const [activeCourse, setActiveCourse] = useState<string>("");
+  const [confirmId, setConfirmId] = useState<string>("");
 
   // search
   const [q, setQ] = useState("");
@@ -120,6 +127,19 @@ export default function Library({ onOpen }: { onOpen: (taskId: string) => void }
     setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, course: course.trim() } : t)));
   };
 
+  const removeTask = async (id: string) => {
+    setConfirmId("");
+    try {
+      const r = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+      if (!r.ok) return;
+    } catch {
+      return;
+    }
+    setTasks((ts) => ts.filter((t) => t.id !== id));
+    setHits((hs) => hs.filter((h) => h.taskId !== id));
+    onDeleted?.(id);
+  };
+
   return (
     <div className="space-y-6">
       {/* Tabs */}
@@ -197,6 +217,29 @@ export default function Library({ onOpen }: { onOpen: (taskId: string) => void }
                 <button className="btn-ghost !px-4 !py-1.5 !text-sm" onClick={() => onOpen(t.id)}>
                   打开
                 </button>
+                {confirmId === t.id ? (
+                  <span className="flex items-center gap-2">
+                    <button
+                      className="btn-ghost !px-3 !py-1.5 !text-xs"
+                      style={{ color: "var(--err)", borderColor: "var(--err)" }}
+                      onClick={() => removeTask(t.id)}
+                    >
+                      确认删除
+                    </button>
+                    <button className="btn-ghost !px-3 !py-1.5 !text-xs" onClick={() => setConfirmId("")}>
+                      取消
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    className="btn-ghost !px-3 !py-1.5"
+                    title="删除该视频及其全部产物"
+                    aria-label={`删除 ${t.title || t.id}`}
+                    onClick={() => setConfirmId(t.id)}
+                  >
+                    <Trash2 size={14} strokeWidth={1.75} />
+                  </button>
+                )}
               </div>
             ))}
             <datalist id="course-options">

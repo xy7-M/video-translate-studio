@@ -253,7 +253,18 @@ export default function Home() {
         </nav>
       </header>
 
-      {view === "library" && <Library onOpen={openTask} />}
+      {view === "library" && (
+        <Library
+          onOpen={openTask}
+          onDeleted={(id) => {
+            if (task?.id === id) {
+              if (pollRef.current) clearInterval(pollRef.current);
+              setTask(null);
+              setSegs([]);
+            }
+          }}
+        />
+      )}
 
       {view === "work" && (
       <>

@@ -111,6 +111,42 @@ export function updateTask(id: string, patch: Partial<Task>) {
   return t;
 }
 
+/**
+ * 删除任务及其全部磁盘产物（上传视频 / 音轨 / 中间 json / srt / 烧录 mp4 / PDF）。
+ * 只清理位于本项目 .data 目录下的文件，用户原始磁盘文件不受影响。
+ * task json 损坏（OneDrive 回滚等）时仍按 id 前缀强删，避免产生删不掉的僵尸任务。
+ */
+export function deleteTask(id: string): boolean {
+  if (!/^[a-zA-Z0-9_-]{1,64}$/.test(id)) return false; // 防路径注入
+  const t = getTask(id);
+  const taskExists = fs.existsSync(taskPath(id));
+  if (!t && !taskExists) return false;
+
+  const inData = (p?: string) =>
+    !!p && path.resolve(p).startsWith(path.resolve(DATA_DIR) + path.sep);
+
+  const targets = new Set<string>();
+  if (t) for (const p of [t.videoFile, t.audioFile, t.srtFile, t.burnedFile]) if (inData(p)) targets.add(path.resolve(p!));
+
+  // 按 id 前缀扫工作目录与输出目录，兜住未在 task 里记录的中间产物
+  for (const dir of [UPLOAD_DIR, WORK_DIR, OUT_DIR]) {
+    if (!fs.existsSync(dir)) continue;
+    for (const f of fs.readdirSync(dir)) {
+      if (f === id || f.startsWith(`${id}.`) || f.startsWith(`${id}_`)) targets.add(path.join(dir, f));
+    }
+  }
+
+  for (const p of Array.from(targets)) {
+    try {
+      fs.rmSync(p, { force: true });
+    } catch {
+      /* 文件被占用（如视频正在播放）时跳过，仍继续删其余产物 */
+    }
+  }
+  fs.rmSync(taskPath(id), { force: true });
+  return true;
+}
+
 function run(
   cmd: string,
   args: string[],
