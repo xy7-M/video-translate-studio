@@ -24,6 +24,7 @@ type SearchHit = {
   end: number;
   text: string;
   zh?: string;
+  source?: string; // AI 笔记 / 专业词表命中时标注来源
 };
 
 type ChatMsg = { role: "user" | "ai"; text: string };
@@ -363,7 +364,12 @@ export default function Library({
                 >
                   <p className="text-xs mono text-[var(--muted)] mb-1">
                     {h.course ? `${h.course} · ` : ""}
-                    {h.title || h.taskId} · {fmtClock(h.start)}
+                    {h.title || h.taskId}
+                    {h.source ? (
+                      <span className="badge-note !text-[10px] px-2 py-0.5 ml-2 align-middle">{h.source}</span>
+                    ) : (
+                      <> · {fmtClock(h.start)}</>
+                    )}
                   </p>
                   <p className="text-sm truncate">{h.text}</p>
                   {h.zh && <p className="text-sm text-[var(--muted)] truncate">{h.zh}</p>}

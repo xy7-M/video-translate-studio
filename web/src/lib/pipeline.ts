@@ -497,46 +497,75 @@ export type SearchHit = {
   end: number;
   text: string;
   zh?: string;
+  source?: string; // 命中来源：字幕原文（无）/ AI 笔记条目 / 专业词表
 };
+
+/** 词组命中计数 */
+function countTerms(hay: string, terms: string[]): number {
+  let n = 0;
+  for (const term of terms) if (hay.includes(term)) n++;
+  return n;
+}
+
+/** 摘要/词表的可检索块 */
+function noteBlocks(t: Task): { label: string; text: string }[] {
+  const blocks: { label: string; text: string }[] = [];
+  for (const [label, items] of [
+    ["本节课要点", t.summary?.points || []],
+    ["教授强调 / 疑似考点", t.summary?.emphasis || []],
+    ["待办事项", t.summary?.actions || []],
+  ] as const) {
+    for (const item of items) blocks.push({ label, text: item });
+  }
+  for (const g of t.glossary || []) blocks.push({ label: "专业词表", text: `${g.en} ${g.zh} ${g.note || ""}` });
+  return blocks;
+}
 
 export function searchAll(query: string): SearchHit[] {
   const terms = tokenize(query);
   if (!terms.length) return [];
   const hits: (SearchHit & { score: number })[] = [];
   for (const t of listTasks()) {
-    if (!t.segments) continue;
     const meta = `${t.title || ""} ${t.course || ""}`.toLowerCase();
-    for (const s of t.segments) {
+    for (const s of t.segments || []) {
       const hay = `${s.text} ${s.zh || ""}`.toLowerCase();
-      let score = 0;
-      for (const term of terms) {
-        if (hay.includes(term)) score += 2;
-        if (meta.includes(term)) score += 1;
-      }
+      let score = countTerms(hay, terms) * 2;
+      if (countTerms(meta, terms)) score += 1;
       if (score > 0) hits.push({ taskId: t.id, title: t.title, course: t.course, start: s.start, end: s.end, text: s.text, zh: s.zh, score });
+    }
+    // AI 笔记与词表同样可搜（「待办事项有哪些」这类问题命中的是摘要而非字幕）
+    // 注意把分类标签也计入检索文本：条目本身常不含「待办」「考点」这类元词
+    for (const b of noteBlocks(t)) {
+      const score = countTerms(`${b.label} ${b.text}`.toLowerCase(), terms) * 2;
+      if (score > 0)
+        hits.push({ taskId: t.id, title: t.title, course: t.course, start: 0, end: 0, text: b.text, source: b.label, score });
     }
   }
   return hits
     .sort((a, b) => b.score - a.score)
     .slice(0, 50)
-    .map((h) => ({ taskId: h.taskId, title: h.title, course: h.course, start: h.start, end: h.end, text: h.text, zh: h.zh }));
+    .map((h) => ({ taskId: h.taskId, title: h.title, course: h.course, start: h.start, end: h.end, text: h.text, zh: h.zh, source: h.source }));
 }
 
-/** 跨课程问答的语料检索（中英混合分词打分，本地零依赖）：返回最相关的若干句上下文 */
+/** 跨课程问答的语料检索（中英混合分词打分，本地零依赖）：返回最相关的若干上下文块 */
 export function retrieveCorpus(query: string, course?: string): string {
   const terms = tokenize(query);
   const scored: { text: string; score: number; taskId: string; title?: string }[] = [];
   for (const t of listTasks()) {
     if (course && t.course !== course) continue;
+    // AI 笔记与词表块（标签也计入检索文本，支持「待办事项有哪些」这类元提问）
+    for (const b of noteBlocks(t)) {
+      const score = countTerms(`${b.label} ${b.text}`.toLowerCase(), terms) * 2;
+      if (score > 0) scored.push({ text: `（${b.label}）${b.text}`, score, taskId: t.id, title: t.title });
+    }
     if (!t.segments) continue;
-    // 以 5 句为窗口聚合，给模型足够的上下文
+    // 以 5 句为窗口聚合字幕，给模型足够的上下文
     const win: Segment[] = [];
     for (let i = 0; i < t.segments.length; i++) {
       win.push(t.segments[i]);
       if (win.length === 5) {
         const hay = win.map((s) => `${s.text} ${s.zh || ""}`).join(" ").toLowerCase();
-        let score = 0;
-        for (const term of terms) if (hay.includes(term)) score += 1;
+        const score = countTerms(hay, terms);
         if (score > 0) scored.push({ text: win.map((s) => `[${fmtClock(s.start)}] ${s.text}（${s.zh || ""}）`).join("\n"), score, taskId: t.id, title: t.title });
         win.shift();
       }
