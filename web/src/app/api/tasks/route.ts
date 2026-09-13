@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listTasks, updateTask } from "@/lib/pipeline";
+import { findCourseVariant, listTasks, updateTask } from "@/lib/pipeline";
 
 export const runtime = "nodejs";
 
@@ -26,7 +26,18 @@ export async function POST(req: Request) {
   if (!body.id) return NextResponse.json({ error: "缺少 id" }, { status: 400 });
 
   const patch: { course?: string; title?: string } = {};
-  if (typeof body.course === "string") patch.course = body.course.trim() || undefined;
+  if (typeof body.course === "string") {
+    const course = body.course.trim();
+    // 课程名不可重复：与既有频道只差大小写/空格时拒绝，提示直接复用已有名
+    const variant = findCourseVariant(course, body.id);
+    if (variant) {
+      return NextResponse.json(
+        { error: `课程「${variant}」已存在，请直接使用「${variant}」，不要重复命名` },
+        { status: 409 }
+      );
+    }
+    patch.course = course || undefined;
+  }
   if (typeof body.title === "string") patch.title = body.title.trim() || undefined;
   if (!Object.keys(patch).length) return NextResponse.json({ error: "缺少修改内容" }, { status: 400 });
 

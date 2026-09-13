@@ -153,6 +153,81 @@ export function deleteTask(id: string): boolean {
   return true;
 }
 
+// —— 历史记录库：全文搜索词 + AI 问答对（落盘 .data/history.json，仿 config.json 单文件模式）——
+const HISTORY_FILE = path.join(DATA_DIR, "history.json");
+const MAX_SEARCH_HISTORY = 50;
+const MAX_CHAT_HISTORY = 100;
+
+export type SearchHistoryItem = { id: string; q: string; ts: number; hits: number };
+export type ChatHistoryItem = { id: string; question: string; answer: string; course?: string; ts: number };
+export type History = { searches: SearchHistoryItem[]; chats: ChatHistoryItem[] };
+
+function readHistory(): History {
+  try {
+    const h = JSON.parse(fs.readFileSync(HISTORY_FILE, "utf-8")) as Partial<History>;
+    return { searches: h.searches || [], chats: h.chats || [] };
+  } catch {
+    return { searches: [], chats: [] };
+  }
+}
+
+function writeHistory(h: History) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(HISTORY_FILE, JSON.stringify(h, null, 2), "utf-8");
+}
+
+export function listHistory(): History {
+  return readHistory();
+}
+
+/** 记录一次搜索：同词去重置顶，超出上限裁尾 */
+export function addSearchHistory(q: string, hits: number) {
+  const h = readHistory();
+  const term = q.trim();
+  if (!term) return;
+  h.searches = [
+    { id: randomUUID().slice(0, 8), q: term, ts: Date.now(), hits },
+    ...h.searches.filter((s) => s.q !== term),
+  ].slice(0, MAX_SEARCH_HISTORY);
+  writeHistory(h);
+}
+
+/** 记录一次问答（含 DeepSeek 回答），同问题去重置顶 */
+export function addChatHistory(question: string, answer: string, course?: string) {
+  const h = readHistory();
+  const q = question.trim();
+  if (!q) return;
+  h.chats = [
+    { id: randomUUID().slice(0, 8), question: q, answer, course: course?.trim() || undefined, ts: Date.now() },
+    ...h.chats.filter((c) => c.question !== q),
+  ].slice(0, MAX_CHAT_HISTORY);
+  writeHistory(h);
+}
+
+export function clearHistory(kind: "search" | "chat" | "all") {
+  const h = readHistory();
+  if (kind === "search" || kind === "all") h.searches = [];
+  if (kind === "chat" || kind === "all") h.chats = [];
+  writeHistory(h);
+}
+
+/**
+ * 课程名查重：与既有频道 trim 后完全一致 → 正常归类，返回 null；
+ * 仅大小写/首尾空格等变体重名（如已有「Math」又输入「math」）→ 返回已有频道名，供前端提示复用。
+ */
+export function findCourseVariant(newCourse: string, exceptTaskId?: string): string | null {
+  const norm = (s: string) => s.trim().toLowerCase();
+  const target = newCourse.trim();
+  if (!target) return null; // 清空归类（回到未分类）不算新建
+  let variant: string | null = null;
+  for (const t of listTasks()) {
+    if (t.id === exceptTaskId || !t.course) continue;
+    if (t.course.trim() === target) return null; // 精确同名 = 归入已有频道
+    if (norm(t.course) === norm(target)) variant = t.course.trim();
+  }
+  return variant;
+}
+
 function run(
   cmd: string,
   args: string[],

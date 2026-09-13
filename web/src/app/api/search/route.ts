@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { searchAll } from "@/lib/pipeline";
+import { addSearchHistory, searchAll } from "@/lib/pipeline";
 
 export const runtime = "nodejs";
 
@@ -7,5 +7,7 @@ export const runtime = "nodejs";
 export async function GET(req: Request) {
   const q = new URL(req.url).searchParams.get("q") || "";
   if (!q.trim()) return NextResponse.json({ hits: [] });
-  return NextResponse.json({ hits: searchAll(q) });
+  const hits = searchAll(q);
+  addSearchHistory(q, hits.length); // 写入搜索历史库
+  return NextResponse.json({ hits });
 }

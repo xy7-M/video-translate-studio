@@ -55,6 +55,8 @@ export default function Home() {
   const [burning, setBurning] = useState(false);
   const [pdfing, setPdfing] = useState(false);
   const [pdfErr, setPdfErr] = useState("");
+  const [courseErr, setCourseErr] = useState("");
+  const [courseKey, setCourseKey] = useState(0); // 归类失败时重挂载输入框，回滚显示值
   const [segs, setSegs] = useState<Segment[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval>>();
@@ -206,12 +208,24 @@ export default function Home() {
 
   const saveCourse = async (course: string) => {
     if (!task) return;
+    setCourseErr("");
+    const prev = task.course || "";
     setTask((p) => p && { ...p, course: course.trim() });
-    await fetch("/api/tasks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: task.id, course }),
-    }).catch(() => {});
+    try {
+      const r = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: task.id, course }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setCourseErr(j.error || "课程归类失败");
+        setTask((p) => p && { ...p, course: prev }); // 回滚
+        setCourseKey((k) => k + 1); // 重挂载非受控输入框，恢复旧值
+      }
+    } catch {
+      /* ignore */
+    }
   };
 
   const saveTitle = async (title: string) => {
@@ -396,12 +410,14 @@ export default function Home() {
               <div>
                 <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest mb-2">归入课程频道</p>
                 <input
+                  key={courseKey}
                   placeholder="如：Math101 / CS210 / 经济学原理…"
                   defaultValue={task.course || ""}
                   onBlur={(e) => saveCourse(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
                   className="w-full bg-transparent border border-[var(--line)] rounded-full px-4 py-2 text-sm outline-none focus:border-[var(--accent)] transition-colors duration-150"
                 />
+                {courseErr && <p className="text-xs mt-1.5 px-1" style={{ color: "var(--err)" }}>{courseErr}</p>}
               </div>
 
               {/* 导出 + 烧录 */}

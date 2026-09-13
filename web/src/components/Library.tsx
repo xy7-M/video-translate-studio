@@ -29,6 +29,9 @@ type SearchHit = {
 
 type ChatMsg = { role: "user" | "ai"; text: string };
 
+type SearchHistoryItem = { id: string; q: string; ts: number; hits: number };
+type ChatHistoryItem = { id: string; question: string; answer: string; course?: string; ts: number };
+
 const fmtClock = (sec: number) => {
   const m = Math.floor(sec / 60);
   const s = Math.floor(sec % 60);
@@ -58,12 +61,51 @@ export default function Library({
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [searching, setSearching] = useState(false);
+  const [searchHistory, setSearchHistory] = useState<SearchHistoryItem[]>([]);
 
   // chat
   const [question, setQuestion] = useState("");
   const [chatCourse, setChatCourse] = useState("");
   const [msgs, setMsgs] = useState<ChatMsg[]>([]);
   const [asking, setAsking] = useState(false);
+  const [chatHistory, setChatHistory] = useState<ChatHistoryItem[]>([]);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [chatShown, setChatShown] = useState(20); // 对话区已恢复的历史问答条数
+
+  // 课程归类报错提示（重名等）
+  const [courseErr, setCourseErr] = useState("");
+  const [courseFixKey, setCourseFixKey] = useState(0); // 归类失败时重挂载输入框，回滚显示值
+
+  const loadHistory = useCallback(async () => {
+    try {
+      const r = await fetch("/api/history");
+      const j = await r.json();
+      setSearchHistory(j.searches || []);
+      setChatHistory(j.chats || []);
+      setHistoryLoaded(true);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const clearHistory = async (kind: "search" | "chat") => {
+    await fetch(`/api/history?kind=${kind}`, { method: "DELETE" }).catch(() => {});
+    if (kind === "search") setSearchHistory([]);
+    else {
+      setChatHistory([]);
+      setMsgs([]);
+    }
+  };
+
+  /** 从历史恢复一段问答到对话区（最近 20 条，按时间正序） */
+  const restoreChat = (items: ChatHistoryItem[]) => {
+    const out: ChatMsg[] = [];
+    for (const it of [...items].reverse()) {
+      out.push({ role: "user", text: it.question });
+      out.push({ role: "ai", text: it.answer });
+    }
+    setMsgs(out);
+  };
 
   const refresh = useCallback(async () => {
     try {
@@ -78,6 +120,18 @@ export default function Library({
     refresh();
   }, [refresh]);
 
+  // 切到搜索/问答 tab 时懒加载历史库；首次进入问答 tab 自动恢复上次对话
+  useEffect(() => {
+    if ((tab === "search" || tab === "chat") && !historyLoaded) loadHistory();
+  }, [tab, historyLoaded, loadHistory]);
+
+  useEffect(() => {
+    if (tab === "chat" && historyLoaded && msgs.length === 0 && chatHistory.length > 0) {
+      restoreChat(chatHistory.slice(0, chatShown));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, historyLoaded]);
+
   const courses = useMemo(() => {
     const map = new Map<string, number>();
     for (const t of tasks) {
@@ -91,13 +145,15 @@ export default function Library({
     ? tasks.filter((t) => (t.course || "未分类") === activeCourse)
     : tasks;
 
-  const doSearch = async () => {
-    if (!q.trim()) return;
+  const doSearch = async (term?: string) => {
+    const query = (term ?? q).trim();
+    if (!query) return;
     setSearching(true);
     try {
-      const r = await fetch(`/api/search?q=${encodeURIComponent(q.trim())}`);
+      const r = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
       const j = await r.json();
       setHits(j.hits || []);
+      loadHistory(); // 服务端已记录本次搜索词，刷新历史条
     } finally {
       setSearching(false);
     }
@@ -117,6 +173,7 @@ export default function Library({
       });
       const j = await r.json();
       setMsgs((m) => [...m, { role: "ai", text: j.answer || j.error || "回答失败，请稍后重试" }]);
+      if (j.answer) loadHistory(); // 成功回答后才入历史库
     } catch (e) {
       setMsgs((m) => [...m, { role: "ai", text: e instanceof Error ? e.message : "请求失败" }]);
     } finally {
@@ -125,11 +182,22 @@ export default function Library({
   };
 
   const setCourse = async (id: string, course: string) => {
-    await fetch("/api/tasks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, course }),
-    }).catch(() => {});
+    setCourseErr("");
+    try {
+      const r = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, course }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setCourseErr(j.error || "课程归类失败");
+        setCourseFixKey((k) => k + 1); // 重挂载非受控输入框，回滚显示值
+        return;
+      }
+    } catch {
+      return;
+    }
     setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, course: course.trim() } : t)));
   };
 
@@ -242,6 +310,17 @@ export default function Library({
 
           {/* Task list */}
           <div className="space-y-3">
+            {courseErr && (
+              <div
+                className="panel p-3 text-sm flex items-center justify-between gap-3"
+                style={{ borderColor: "var(--err)", color: "var(--err)" }}
+              >
+                <span>{courseErr}</span>
+                <button className="text-xs underline underline-offset-2 shrink-0" onClick={() => setCourseErr("")}>
+                  知道了
+                </button>
+              </div>
+            )}
             {shown.length > 0 && (
               <div className="flex items-center gap-3 px-2 text-sm">
                 <label className="flex items-center gap-2 cursor-pointer select-none text-[var(--muted)]">
@@ -323,6 +402,7 @@ export default function Library({
                   </p>
                 </div>
                 <input
+                  key={`${t.id}-${courseFixKey}`}
                   list="course-options"
                   placeholder="归类课程…"
                   defaultValue={t.course || ""}
@@ -377,10 +457,38 @@ export default function Library({
               placeholder="搜索所有课堂转录，如 gradient descent、作业、midterm…"
               className="flex-1 bg-transparent outline-none text-sm placeholder:text-[var(--muted)] px-2"
             />
-            <button className="btn-primary !py-2" onClick={doSearch} disabled={searching}>
+            <button className="btn-primary !py-2" onClick={() => doSearch()} disabled={searching}>
               {searching ? "搜索中…" : "搜索"}
             </button>
           </div>
+          {searchHistory.length > 0 && (
+            <div className="panel p-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest">最近搜索</p>
+                <button
+                  className="text-xs text-[var(--muted)] hover:text-[var(--text)] underline underline-offset-2"
+                  onClick={() => clearHistory("search")}
+                >
+                  清空历史
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {searchHistory.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => {
+                      setQ(s.q);
+                      doSearch(s.q);
+                    }}
+                    className="px-3 py-1.5 rounded-full text-xs border border-[var(--line)] bg-[var(--bg-2)] hover:border-[var(--accent)] transition-colors duration-150"
+                  >
+                    {s.q}
+                    <span className="text-[var(--muted)] ml-1.5">{s.hits}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {hits.length > 0 && (
             <div className="panel overflow-hidden">
               {hits.map((h, i) => (
@@ -434,6 +542,18 @@ export default function Library({
               {asking ? "思考中…" : "提问"}
             </button>
           </div>
+          {chatHistory.length > chatShown && (
+            <button
+              className="self-center text-xs text-[var(--muted)] hover:text-[var(--text)] underline underline-offset-2"
+              onClick={() => {
+                const n = chatShown + 20;
+                setChatShown(n);
+                restoreChat(chatHistory.slice(0, n));
+              }}
+            >
+              加载更早的问答（还有 {chatHistory.length - chatShown} 条）
+            </button>
+          )}
           <div className="flex-1 space-y-4 overflow-y-auto max-h-[520px] pr-1">
             {msgs.length === 0 && (
               <p className="text-sm text-[var(--muted)] text-center mt-16">
@@ -454,6 +574,17 @@ export default function Library({
               </div>
             ))}
           </div>
+          {chatHistory.length > 0 && (
+            <div className="flex items-center justify-between text-xs text-[var(--muted)] border-t border-[var(--hair)] pt-3">
+              <span>问答历史已保存 {chatHistory.length} 条，刷新页面不会丢失</span>
+              <button
+                className="hover:text-[var(--text)] underline underline-offset-2"
+                onClick={() => clearHistory("chat")}
+              >
+                清空历史
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

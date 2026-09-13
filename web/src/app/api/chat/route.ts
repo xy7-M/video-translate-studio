@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { retrieveCorpus } from "@/lib/pipeline";
+import { addChatHistory, retrieveCorpus } from "@/lib/pipeline";
 import { deepseekText } from "@/lib/deepseek";
 
 export const runtime = "nodejs";
@@ -25,6 +25,7 @@ export async function POST(req: Request) {
         "语料中没有的内容明确说明「课程记录中未提及」，不要编造。引用时标注来源视频标题与时间戳。",
       `课堂语料：\n${corpus.slice(0, 12000)}\n\n学生问题：${question}`
     );
+    addChatHistory(question, answer, body.course); // 写入问答历史库
     return NextResponse.json({ answer });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
