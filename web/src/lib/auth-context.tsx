@@ -29,7 +29,6 @@ export const useAuth = () => useContext(Ctx);
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
-  const [showLogin, setShowLogin] = useState(false);
 
   useEffect(() => {
     let off = () => {};
@@ -63,7 +62,6 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     return () => clearInterval(t);
   }, [session]);
 
-  const openLogin = useCallback(() => setShowLogin(true), []);
   const signOut = useCallback(async () => {
     const sb = await getSupabase();
     await sb?.auth.signOut();
@@ -71,27 +69,16 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   }, []);
 
   return (
-    <Ctx.Provider value={{ session, ready, openLogin, signOut }}>
+    <Ctx.Provider value={{ session, ready, openLogin: () => {}, signOut }}>
       {children}
-      {showLogin && !session && (
+      {/* 未登录时强制弹出注册弹窗：无关闭按钮、点遮罩不关闭，注册/登录可切换 */}
+      {ready && !session && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: "rgba(28,25,17,0.35)" }}
-          onClick={() => setShowLogin(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto"
+          style={{ background: "rgba(28,25,17,0.45)" }}
         >
-          <div className="relative w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
-            <AuthCard
-              onDone={(s) => {
-                if (s) setShowLogin(false);
-              }}
-            />
-            <button
-              onClick={() => setShowLogin(false)}
-              aria-label="关闭登录"
-              className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-[var(--panel)] border-[1.5px] border-[var(--line)] text-[var(--muted)] hover:text-[var(--text)] shadow-[2px_2px_0_rgba(28,25,17,.16)]"
-            >
-              ×
-            </button>
+          <div className="relative w-full max-w-sm my-8">
+            <AuthCard mode="register" onDone={() => {}} />
           </div>
         </div>
       )}

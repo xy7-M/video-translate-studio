@@ -8,8 +8,14 @@ import { Mail, Lock, LogIn, UserPlus, CheckCircle2 } from "lucide-react";
 const ic = { size: 15, strokeWidth: 1.75, className: "shrink-0" } as const;
 
 /** 登录 / 注册卡（纸墨手账奶油风），邮箱验证走「浏览器确认 → 本地接力」 */
-export default function AuthCard({ onDone }: { onDone: (s: Session | null) => void }) {
-  const [mode, setMode] = useState<"login" | "register">("login");
+export default function AuthCard({
+  onDone,
+  mode: initialMode = "login",
+}: {
+  onDone: (s: Session | null) => void;
+  mode?: "login" | "register";
+}) {
+  const [mode, setMode] = useState<"login" | "register">(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
