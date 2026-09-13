@@ -209,27 +209,12 @@ function buildMenu() {
       label: "视图",
       submenu: [
         { role: "reload", label: "重新加载" },
-        { role: "toggleDevTools", label: "开发者工具" },
         { type: "separator" },
         { role: "resetZoom", label: "重置缩放" },
         { role: "zoomIn", label: "放大" },
         { role: "zoomOut", label: "缩小" },
         { type: "separator" },
         { role: "togglefullscreen", label: "全屏" },
-      ],
-    },
-    {
-      label: "帮助",
-      submenu: [
-        { label: "检查更新", click: () => manualCheck() },
-        {
-          label: "打开数据目录",
-          click: () => shell.openPath(HOME),
-        },
-        {
-          label: "查看日志",
-          click: () => shell.openPath(APP_LOG),
-        },
       ],
     },
   ];
