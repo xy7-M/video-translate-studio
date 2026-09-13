@@ -2,9 +2,8 @@
 
 import { useEffect, useState } from "react";
 import {
-  CheckCircle2,
+  Cloud,
   Download,
-  KeyRound,
   RefreshCw,
   Settings,
   X,
@@ -13,12 +12,9 @@ import type { DesktopUpdateStatus } from "@/desktop";
 
 const ic = { size: 15, strokeWidth: 1.75, className: "shrink-0" } as const;
 
-/** 顶部齿轮按钮 + 设置弹窗（DeepSeek 密钥 / 版本更新） */
+/** 顶部齿轮按钮 + 设置弹窗（AI 服务说明 / 版本更新） */
 export default function SettingsModal() {
   const [open, setOpen] = useState(false);
-  const [keyVal, setKeyVal] = useState("");
-  const [saved, setSaved] = useState(false);
-  const [info, setInfo] = useState<{ hasKey: boolean; tail: string; model: string } | null>(null);
   const [app, setApp] = useState<{ version: string; feed: string } | null>(null);
   const [feedVal, setFeedVal] = useState("");
   const [feedSaved, setFeedSaved] = useState(false);
@@ -28,11 +24,6 @@ export default function SettingsModal() {
 
   useEffect(() => {
     if (!open) return;
-    setSaved(false);
-    fetch("/api/config")
-      .then((r) => r.json())
-      .then(setInfo)
-      .catch(() => {});
     desktop?.getInfo().then((i) => {
       setApp(i);
       setFeedVal(i.feed || "");
@@ -44,19 +35,6 @@ export default function SettingsModal() {
     const off = desktop.onUpdateStatus(setUpd);
     return off;
   }, [desktop]);
-
-  const saveKey = async () => {
-    if (!keyVal.trim()) return;
-    await fetch("/api/config", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ apiKey: keyVal.trim() }),
-    }).catch(() => {});
-    setKeyVal("");
-    setSaved(true);
-    const r = await fetch("/api/config").catch(() => null);
-    if (r) setInfo(await r.json());
-  };
 
   const saveFeed = async () => {
     if (!desktop) return;
@@ -109,32 +87,15 @@ export default function SettingsModal() {
               </button>
             </div>
 
-            {/* DeepSeek 密钥 */}
+            {/* AI 服务说明 */}
             <section className="space-y-3">
               <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest inline-flex items-center gap-1.5">
-                <KeyRound size={13} strokeWidth={1.75} /> DeepSeek API 密钥
+                <Cloud size={13} strokeWidth={1.75} /> AI 服务
               </p>
-              {info?.hasKey && (
-                <p className="text-sm text-[var(--ok)] inline-flex items-center gap-1.5">
-                  <CheckCircle2 size={14} strokeWidth={2} /> 已保存（…{info.tail}）
-                </p>
-              )}
-              <div className="flex gap-2">
-                <input
-                  type="password"
-                  value={keyVal}
-                  onChange={(e) => setKeyVal(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && saveKey()}
-                  placeholder={info?.hasKey ? "留空不修改，输入新密钥可替换" : "sk-…"}
-                  className="flex-1 bg-transparent border border-[var(--line)] rounded-full px-4 py-2 text-sm outline-none focus:border-[var(--accent)] transition-colors duration-150"
-                />
-                <button className="btn-primary whitespace-nowrap" onClick={saveKey} disabled={!keyVal.trim()}>
-                  保存
-                </button>
-              </div>
-              {saved && <p className="text-xs text-[var(--ok)]">已保存，立即生效</p>}
+              <p className="text-sm text-[var(--ok)]">已连接云端翻译服务 ✓</p>
               <p className="text-xs text-[var(--muted)] leading-relaxed">
-                密钥只保存在本机数据目录的 config.json 中，随本地服务进程使用，不会上传到任何第三方。
+                翻译、标点校对与课堂笔记由登录账号统一提供，无需配置任何 API 密钥。
+                视频转写与全部数据仍保存在本机，视频不出本机。
               </p>
             </section>
 

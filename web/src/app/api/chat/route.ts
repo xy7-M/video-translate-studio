@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { addChatHistory, retrieveCorpus } from "@/lib/pipeline";
+import { captureToken } from "@/lib/session";
 import { deepseekText } from "@/lib/deepseek";
 
 export const runtime = "nodejs";
@@ -7,6 +8,7 @@ export const maxDuration = 120;
 
 /** AI Chat 跨课程问答（借鉴 Otter）：基于已转写课程语料回答复习问题 */
 export async function POST(req: Request) {
+  captureToken(req); // 问答直连 Edge Function，需要本次请求的登录 token
   const body = (await req.json()) as { question?: string; course?: string };
   const question = (body.question || "").trim();
   if (!question) return NextResponse.json({ error: "请输入问题" }, { status: 400 });

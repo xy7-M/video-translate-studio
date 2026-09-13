@@ -11,4 +11,10 @@ contextBridge.exposeInMainWorld("desktop", {
     ipcRenderer.on("update:status", handler);
     return () => ipcRenderer.removeListener("update:status", handler);
   },
+  // 登录会话持久化：写本机 vtdata/auth.json，不用 localStorage
+  authStore: {
+    get: () => ipcRenderer.invoke("auth:get"),
+    set: (raw) => ipcRenderer.invoke("auth:set", raw),
+    remove: () => ipcRenderer.invoke("auth:remove"),
+  },
 });

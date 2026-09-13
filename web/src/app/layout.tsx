@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import AuthGate from "@/components/AuthGate";
 import "./globals.css";
 
 const geistSans = localFont({
@@ -31,7 +32,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN">
-      <body className={`${geistSans.variable} ${geistMono.variable} ${caveat.variable}`}>{children}</body>
+      <body className={`${geistSans.variable} ${geistMono.variable} ${caveat.variable}`}>
+        <AuthGate>{children}</AuthGate>
+      </body>
     </html>
   );
 }

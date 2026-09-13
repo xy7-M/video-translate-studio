@@ -18,6 +18,12 @@ export interface DesktopBridge {
   restartToUpdate: () => void;
   setFeedUrl: (url: string) => Promise<{ ok: boolean }>;
   onUpdateStatus: (cb: (s: DesktopUpdateStatus) => void) => () => void;
+  /** 登录会话持久化（本机 vtdata/auth.json，不用 localStorage） */
+  authStore: {
+    get: () => Promise<string | null>;
+    set: (raw: string) => Promise<{ ok: boolean; message?: string }>;
+    remove: () => Promise<{ ok: boolean }>;
+  };
 }
 
 declare global {

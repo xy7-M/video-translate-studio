@@ -108,6 +108,18 @@ function migrateLegacyData() {
 }
 
 // ───────────────────────── 端口探测 ─────────────────────────
+// 邮箱验证链接指向本机端口，固定端口可让重启后旧链接仍然有效；被占用时回退随机端口
+const PREFERRED_PORT = 3456;
+
+function isPortFree(port) {
+  return new Promise((resolve) => {
+    const srv = net.createServer();
+    srv.unref();
+    srv.on("error", () => resolve(false));
+    srv.listen(port, "127.0.0.1", () => srv.close(() => resolve(true)));
+  });
+}
+
 function findFreePort() {
   return new Promise((resolve, reject) => {
     const srv = net.createServer();
@@ -118,6 +130,10 @@ function findFreePort() {
       srv.close(() => resolve(p));
     });
   });
+}
+
+async function pickPort() {
+  return (await isPortFree(PREFERRED_PORT)) ? PREFERRED_PORT : findFreePort();
 }
 
 function waitForServer(port, timeoutMs = 120000) {
@@ -140,7 +156,6 @@ function waitForServer(port, timeoutMs = 120000) {
 
 // ───────────────────── 启动 Next standalone 服务 ─────────────────────
 function startServer(port) {
-  const cfg = readConfig();
   const serverJs = path.join(RES, "server", "server.js");
   const pythonExe = path.join(RES, "runtime", "python", "python.exe");
   const ffmpegExe = path.join(RES, "runtime", "ffmpeg", "ffmpeg.exe");
@@ -159,8 +174,7 @@ function startServer(port) {
     HF_ENDPOINT: process.env.HF_ENDPOINT || "https://hf-mirror.com",
     HF_HUB_DISABLE_XET: "1",
   });
-  if (cfg.deepseekApiKey) env.DEEPSEEK_API_KEY = cfg.deepseekApiKey;
-  if (cfg.deepseekBaseUrl) env.DEEPSEEK_BASE_URL = cfg.deepseekBaseUrl;
+  // AI 调用改走 Supabase Edge Function 代理：密钥只存在于云端 secret，本机不再注入 DeepSeek key
 
   const out = fs.openSync(SERVER_LOG, "w");
   serverProc = spawn(process.execPath, [serverJs], {
@@ -359,6 +373,32 @@ ipcMain.handle("updater:set-feed", (_e, url) => {
   return { ok: true };
 });
 
+// ───────────────── 登录会话持久化（不进 localStorage） ─────────────────
+const AUTH_FILE = path.join(HOME, "auth.json");
+ipcMain.handle("auth:get", () => {
+  try {
+    return fs.readFileSync(AUTH_FILE, "utf8");
+  } catch {
+    return null;
+  }
+});
+ipcMain.handle("auth:set", (_e, raw) => {
+  try {
+    fs.writeFileSync(AUTH_FILE, String(raw || ""), "utf8");
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, message: err.message };
+  }
+});
+ipcMain.handle("auth:remove", () => {
+  try {
+    fs.rmSync(AUTH_FILE, { force: true });
+  } catch {
+    /* ignore */
+  }
+  return { ok: true };
+});
+
 // ─────────────────────────── 启动 ───────────────────────────
 app.setAppUserModelId("com.mengxiaoyao.videotranslate");
 
@@ -374,7 +414,7 @@ app.whenReady().then(async () => {
 
   try {
     migrateLegacyData();
-    serverPort = await findFreePort();
+    serverPort = await pickPort();
     startServer(serverPort);
     await waitForServer(serverPort);
     await createWindow(`http://127.0.0.1:${serverPort}`);

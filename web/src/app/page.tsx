@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import Library from "@/components/Library";
 import SettingsModal from "@/components/SettingsModal";
+import { authedFetch } from "@/lib/supabase";
 
 /** 墨线细描边图标：与手账风 1.5px 描边同语言 */
 const ic = { size: 15, strokeWidth: 1.75, className: "shrink-0" } as const;
@@ -80,7 +81,7 @@ export default function Home() {
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
       try {
-        const r = await fetch(`/api/status/${id}`);
+        const r = await authedFetch(`/api/status/${id}`);
         const t: Task = await r.json();
         setTask(t);
         // 用户未编辑时，始终以后端最新数据为准（转写→翻译会逐步补上 zh）
@@ -103,7 +104,7 @@ export default function Home() {
     const form = new FormData();
     form.append("video", file);
     try {
-      const r = await fetch("/api/upload", { method: "POST", body: form });
+      const r = await authedFetch("/api/upload", { method: "POST", body: form });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "上传失败");
       setTask({ id: j.taskId, status: "queued", progress: 0, message: "已加入队列" });
@@ -193,7 +194,7 @@ export default function Home() {
   /** 重跑字幕：用最新断句 + 逐句翻译规则重新生成（AI 笔记保留） */
   const reworkSubtitles = async () => {
     if (!task) return;
-    const r = await fetch(`/api/reprocess/${task.id}`, { method: "POST" }).catch(() => null);
+    const r = await authedFetch(`/api/reprocess/${task.id}`, { method: "POST" }).catch(() => null);
     if (!r?.ok) return;
     editedRef.current = false; // 重跑后以后端新字幕为准
     poll(task.id);

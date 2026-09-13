@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BookOpen, MessageCircle, Search, Trash2 } from "lucide-react";
+import { authedFetch } from "@/lib/supabase";
 
 const tabIc = { size: 14, strokeWidth: 1.75, className: "shrink-0" } as const;
 
@@ -166,7 +167,7 @@ export default function Library({
     setMsgs((m) => [...m, { role: "user", text }]);
     setAsking(true);
     try {
-      const r = await fetch("/api/chat", {
+      const r = await authedFetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: text, course: chatCourse }),

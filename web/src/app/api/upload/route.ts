@@ -4,6 +4,7 @@ import { Readable } from "stream";
 import { pipeline as streamPipeline } from "stream/promises";
 import { NextResponse } from "next/server";
 import { UPLOAD_DIR, newTask, updateTask, runPipeline, probeDuration, MAX_DURATION_SEC } from "@/lib/pipeline";
+import { captureToken } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -12,6 +13,7 @@ const ALLOWED = new Set([".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v"]);
 const MAX_BYTES = 2 * 1024 * 1024 * 1024; // 2GB ≈ 2 小时 720p
 
 export async function POST(req: Request) {
+  captureToken(req); // 暂存登录 token，供后台管线的 AI 阶段使用
   const form = await req.formData();
   const file = form.get("video");
   if (!(file instanceof File)) {
