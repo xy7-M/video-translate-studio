@@ -48,8 +48,14 @@ export type Task = {
   glossary?: GlossaryItem[]; // 专业词表
 };
 
-const ROOT = path.resolve(process.cwd(), "..");
-export const DATA_DIR = path.join(ROOT, ".data");
+// 开发态：web/ 的上级项目根；桌面版：由 Electron 通过 VIDEOTRANS_ROOT 指定 resources 目录
+const ROOT = process.env.VIDEOTRANS_ROOT
+  ? path.resolve(process.env.VIDEOTRANS_ROOT)
+  : path.resolve(process.cwd(), "..");
+// 桌面版数据写入用户目录（%APPDATA%/视频快译/vtdata），开发态仍在项目根 .data
+export const DATA_DIR = process.env.VIDEOTRANS_HOME
+  ? path.resolve(process.env.VIDEOTRANS_HOME)
+  : path.join(ROOT, ".data");
 export const UPLOAD_DIR = path.join(DATA_DIR, "uploads");
 export const WORK_DIR = path.join(DATA_DIR, "work");
 export const OUT_DIR = path.join(DATA_DIR, "out");
@@ -176,9 +182,11 @@ function run(
 }
 
 function findPython(): string {
+  // 桌面版优先使用安装包内置的便携 Python（Electron 通过 PYTHON_BIN 注入）
+  if (process.env.PYTHON_BIN && fs.existsSync(process.env.PYTHON_BIN)) return process.env.PYTHON_BIN;
   const local = path.join(ROOT, "pyenv", "Scripts", "python.exe");
   if (fs.existsSync(local)) return local;
-  return process.env.PYTHON_BIN || "python";
+  return "python";
 }
 
 function findFfmpeg(): string {

@@ -1,0 +1,51 @@
+appId: com.mengxiaoyao.videotranslate
+productName: 视频快译
+copyright: Copyright © 2026 mengxiaoyao
+
+asar: true
+compression: maximum
+
+directories:
+  # 每版本独立输出目录，避免旧 win-unpacked exe 被占用导致清理失败
+  output: dist/${version}
+  buildResources: build
+
+files:
+  - main.cjs
+  - preload.cjs
+  - package.json
+
+# Next standalone 服务 / 转写脚本 / 便携 Python + ffmpeg 全部放到 resources（不进 asar）
+extraResources:
+  - from: .stage/server
+    to: server
+  - from: .stage/scripts
+    to: scripts
+  - from: runtime/python
+    to: runtime/python
+  - from: runtime/ffmpeg
+    to: runtime/ffmpeg
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.ico
+
+nsis:
+  oneClick: false              # 图形向导（非一键静默）
+  perMachine: false            # 安装到当前用户，免 UAC
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: 视频快译
+  deleteAppDataOnUninstall: false  # 卸载保留用户视频与任务数据
+  language: "2052"            # 简体中文安装向导
+  include: build/installer.nsh
+  artifactName: VideoTranslate-Setup-${version}.${ext}
+
+# 仅用于生成 latest.yml；真正的 feed 地址由主进程 setFeedURL 控制
+publish:
+  - provider: generic
+    url: https://github.com/xy7-M/video-translate-studio-feed/releases/latest/download/

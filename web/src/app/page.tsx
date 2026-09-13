@@ -16,6 +16,7 @@ import {
   Zap,
 } from "lucide-react";
 import Library from "@/components/Library";
+import SettingsModal from "@/components/SettingsModal";
 
 /** 墨线细描边图标：与手账风 1.5px 描边同语言 */
 const ic = { size: 15, strokeWidth: 1.75, className: "shrink-0" } as const;
@@ -259,6 +260,7 @@ export default function Home() {
           >
             课程库
           </button>
+          <SettingsModal />
         </nav>
       </header>
       {view === "library" && (

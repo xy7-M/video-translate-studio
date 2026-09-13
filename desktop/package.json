@@ -1,0 +1,21 @@
+{
+  "name": "video-translate-studio",
+  "productName": "视频快译",
+  "version": "0.1.0",
+  "private": true,
+  "description": "英文课堂视频 → 双语字幕 · AI 笔记 · 复习词表（本地优先）",
+  "main": "main.cjs",
+  "author": "mengxiaoyao",
+  "scripts": {
+    "dev": "cross-env VTS_DEV_URL=http://localhost:3000 electron .",
+    "dist": "electron-builder --win nsis --x64 --publish never"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  }
+}
