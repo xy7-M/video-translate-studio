@@ -292,6 +292,31 @@ async function manualCheck() {
   }
 }
 
+// ───────────────────── 下载：弹出保存位置对话框 ─────────────────────
+/** 拦截所有下载：先弹出系统「另存为」让用户选地点，完成后提示并可直接打开所在文件夹 */
+function bindDownloads() {
+  const ses = require("electron").session.defaultSession;
+  ses.on("will-download", (_event, item) => {
+    item.setSavePath(""); // 空字符串 = 强制弹出系统保存对话框（选择下载地点）
+    item.once("done", (_e, state) => {
+      if (state !== "completed" || !mainWin || mainWin.isDestroyed()) return;
+      const savePath = item.getSavePath();
+      dialog
+        .showMessageBox(mainWin, {
+          type: "info",
+          title: "下载完成",
+          message: `已保存到：${savePath}`,
+          buttons: ["打开所在文件夹", "知道了"],
+          defaultId: 0,
+          cancelId: 1,
+        })
+        .then((r) => {
+          if (r.response === 0) shell.showItemInFolder(savePath);
+        });
+    });
+  });
+}
+
 // ─────────────────────────── 窗口 ───────────────────────────
 async function createWindow(url) {
   mainWin = new BrowserWindow({
@@ -355,6 +380,7 @@ app.setAppUserModelId("com.mengxiaoyao.videotranslate");
 app.whenReady().then(async () => {
   buildMenu();
   bindUpdater();
+  bindDownloads();
 
   if (DEV_URL) {
     await createWindow(DEV_URL);

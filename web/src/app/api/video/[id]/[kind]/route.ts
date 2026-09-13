@@ -13,6 +13,12 @@ export async function GET(req: Request, { params }: { params: { id: string; kind
   const stat = fs.statSync(file);
   const type = "video/mp4";
   const range = req.headers.get("range");
+  // ?dl=1 时作为附件下载（用中文标题命名），否则供 <video> 预览
+  const url = new URL(req.url);
+  const dl = url.searchParams.has("dl");
+  const safe = (t.title || t.id).replace(/[\\/:*?"<>|]/g, "_");
+  const disposition = `attachment; filename="video.mp4"; filename*=UTF-8''${encodeURIComponent(`subtitle-${safe}-烧录版.mp4`)}`;
+  const extraHeaders: Record<string, string> = dl ? { "Content-Disposition": disposition } : {};
 
   if (range) {
     const m = /bytes=(\d*)-(\d*)/.exec(range);
@@ -29,11 +35,17 @@ export async function GET(req: Request, { params }: { params: { id: string; kind
         "Content-Range": `bytes ${start}-${end}/${stat.size}`,
         "Accept-Ranges": "bytes",
         "Content-Length": String(chunk.length),
+        ...extraHeaders,
       },
     });
   }
 
   return new NextResponse(fs.readFileSync(file), {
-    headers: { "Content-Type": type, "Content-Length": String(stat.size), "Accept-Ranges": "bytes" },
+    headers: {
+      "Content-Type": type,
+      "Content-Length": String(stat.size),
+      "Accept-Ranges": "bytes",
+      ...extraHeaders,
+    },
   });
 }

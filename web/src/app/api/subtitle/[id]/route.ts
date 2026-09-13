@@ -10,6 +10,9 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
   const fmt = new URL(req.url).searchParams.get("fmt") || "srt";
   const safe = (t.title || t.id).replace(/[\\/:*?"<>|]/g, "_");
+  // 中文标题必须用 RFC 5987 编码，否则 Node 写 header 时会抛 ByteString 错误
+  const disp = (name: string) =>
+    `attachment; filename="${name.replace(/[^\x20-\x7e]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 
   if (fmt === "pdf") {
     try {
@@ -17,7 +20,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       return new NextResponse(new Uint8Array(buf), {
         headers: {
           "Content-Type": "application/pdf",
-          "Content-Disposition": `attachment; filename="subtitle-${safe}.pdf"`,
+          "Content-Disposition": disp(`subtitle-${safe}.pdf`),
         },
       });
     } catch (e) {
@@ -34,7 +37,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   return new NextResponse("\ufeff" + buildSrt(t.segments), {
     headers: {
       "Content-Type": "text/plain; charset=utf-8",
-      "Content-Disposition": `attachment; filename="subtitle-${safe}.srt"`,
+      "Content-Disposition": disp(`subtitle-${safe}.srt`),
     },
   });
 }

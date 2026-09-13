@@ -134,7 +134,7 @@ export default function Home() {
     await syncEdits();
     const a = document.createElement("a");
     a.href = `/api/subtitle/${task.id}`;
-    a.download = `subtitle-${task.id}.srt`;
+    a.download = `subtitle-${task.title || task.id}.srt`;
     a.click();
   };
 
@@ -437,7 +437,7 @@ export default function Home() {
               {task.status === "done" && (
                 <div className="flex items-center gap-4">
                   <a
-                    href={`/api/video/${task.id}/burned`}
+                    href={`/api/video/${task.id}/burned?dl=1`}
                     className="text-sm text-[var(--ok)] inline-flex items-center gap-1.5 underline underline-offset-4"
                     download
                   >
