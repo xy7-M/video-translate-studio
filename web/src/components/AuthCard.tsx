@@ -89,9 +89,9 @@ export default function AuthCard({ onDone }: { onDone: (s: Session | null) => vo
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6">
+    <div className="w-full">
       <div
-        className="panel p-8 w-full max-w-sm space-y-6"
+        className="panel p-8 space-y-6"
         style={{ transform: "rotate(-0.8deg)", boxShadow: "6px 6px 0 rgba(28,25,17,.16)" }}
       >
         <div className="text-center space-y-1">

@@ -18,7 +18,9 @@ import {
 } from "lucide-react";
 import Library from "@/components/Library";
 import SettingsModal from "@/components/SettingsModal";
+import TranslateModal from "@/components/TranslateModal";
 import { authedFetch } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth-context";
 
 /** 墨线细描边图标：与手账风 1.5px 描边同语言 */
 const ic = { size: 15, strokeWidth: 1.75, className: "shrink-0" } as const;
@@ -50,6 +52,7 @@ function fmt(sec: number) {
 }
 
 export default function Home() {
+  const { session, openLogin, signOut } = useAuth();
   const [view, setView] = useState<"work" | "library">("work");
   const [task, setTask] = useState<Task | null>(null);
   const [drag, setDrag] = useState(false);
@@ -97,6 +100,10 @@ export default function Home() {
   useEffect(() => () => pollRef.current && clearInterval(pollRef.current), []);
 
   const upload = async (file: File) => {
+    if (!session) {
+      openLogin();
+      return;
+    }
     setUploading(true);
     setTask(null);
     setSegs([]);
@@ -194,6 +201,10 @@ export default function Home() {
   /** 重跑字幕：用最新断句 + 逐句翻译规则重新生成（AI 笔记保留） */
   const reworkSubtitles = async () => {
     if (!task) return;
+    if (!session) {
+      openLogin();
+      return;
+    }
     const r = await authedFetch(`/api/reprocess/${task.id}`, { method: "POST" }).catch(() => null);
     if (!r?.ok) return;
     editedRef.current = false; // 重跑后以后端新字幕为准
@@ -285,6 +296,27 @@ export default function Home() {
           >
             课程库
           </button>
+          <TranslateModal />
+          {session ? (
+            <button
+              onClick={() => signOut()}
+              title={session.user.email || "已登录"}
+              className="px-4 py-2 rounded-full text-sm text-[var(--muted)] hover:text-[var(--text)] border border-[var(--line)] transition-all duration-200 inline-flex items-center gap-1.5"
+            >
+              <span
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{ background: "var(--ok)" }}
+              />
+              {session.user.email?.split("@")[0] || "已登录"}
+            </button>
+          ) : (
+            <button
+              onClick={openLogin}
+              className="px-5 py-2 rounded-full text-sm bg-[var(--note)] text-[var(--text)] border-[1.5px] border-[var(--line)] shadow-[2px_2px_0_rgba(28,25,17,.16)] hover:translate-y-[-1px] transition-all duration-150"
+            >
+              登录
+            </button>
+          )}
           <SettingsModal />
         </nav>
       </header>

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BookOpen, MessageCircle, Search, Trash2 } from "lucide-react";
 import { authedFetch } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth-context";
 
 const tabIc = { size: 14, strokeWidth: 1.75, className: "shrink-0" } as const;
 
@@ -48,6 +49,7 @@ export default function Library({
   onOpen: (taskId: string) => void;
   onDeleted?: (taskId: string) => void;
 }) {
+  const { session, openLogin } = useAuth();
   const [tab, setTab] = useState<"channels" | "search" | "chat">("channels");
   const [tasks, setTasks] = useState<TaskMeta[]>([]);
   const [activeCourse, setActiveCourse] = useState<string>("");
@@ -163,6 +165,10 @@ export default function Library({
   const ask = async () => {
     const text = question.trim();
     if (!text || asking) return;
+    if (!session) {
+      openLogin();
+      return;
+    }
     setQuestion("");
     setMsgs((m) => [...m, { role: "user", text }]);
     setAsking(true);
