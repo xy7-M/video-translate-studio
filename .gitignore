@@ -21,3 +21,11 @@ __pycache__/
 # 其他
 .DS_Store
 *.log
+
+# Office 临时锁文件
+~$*
+
+# 本地工具与素材目录（不属项目源码）
+.baoyu-skills/
+image-cards/
+*.docx
