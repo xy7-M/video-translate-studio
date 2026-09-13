@@ -10,6 +10,7 @@ import {
   FileText,
   ListChecks,
   Printer,
+  RefreshCw,
   Sparkles,
   Square,
   Upload,
@@ -187,6 +188,15 @@ export default function Home() {
         setBurning(false);
       }
     }, 2000);
+  };
+
+  /** 重跑字幕：用最新断句 + 逐句翻译规则重新生成（AI 笔记保留） */
+  const reworkSubtitles = async () => {
+    if (!task) return;
+    const r = await fetch(`/api/reprocess/${task.id}`, { method: "POST" }).catch(() => null);
+    if (!r?.ok) return;
+    editedRef.current = false; // 重跑后以后端新字幕为准
+    poll(task.id);
   };
 
   /** 从课程库打开历史任务 */
@@ -439,10 +449,18 @@ export default function Home() {
                   </button>
                   <button
                     className="btn-ghost"
-                    disabled={burning || task.status === "burning"}
+                    disabled={burning || task.status === "burning" || stepIndex < 5}
                     onClick={pushEditsAndBurn}
                   >
                     <Clapperboard {...ic} /> 烧录双语视频
+                  </button>
+                  <button
+                    className="btn-ghost"
+                    disabled={stepIndex < 5 || stepIndex === -1}
+                    title="用最新的断句与逐句翻译规则重新生成双语字幕（AI 笔记保留）"
+                    onClick={reworkSubtitles}
+                  >
+                    <RefreshCw {...ic} /> 重跑字幕
                   </button>
                   <button className="btn-ghost" onClick={() => setTask(null)}>
                     下一个视频

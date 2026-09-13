@@ -56,8 +56,15 @@ def main() -> int:
         audio_path,
         language="en",
         vad_filter=True,
+        vad_parameters=dict(min_silence_duration_ms=500),
         beam_size=5,
-        word_timestamps=False,
+        word_timestamps=True,  # 词级时间戳：供 JS 侧按短句重新断句
+        condition_on_previous_text=False,  # 防止复读机循环（重复短语幻觉）
+        initial_prompt=(
+            "Here is a university lecture transcript in English. "
+            "Please add correct punctuation, commas and periods, and capitalize "
+            "each sentence. Keep sentences short and clear."
+        ),
     )
 
     result = []
@@ -65,7 +72,15 @@ def main() -> int:
         text = seg.text.strip()
         if not text:
             continue
-        result.append({"start": round(seg.start, 3), "end": round(seg.end, 3), "text": text})
+        entry = {"start": round(seg.start, 3), "end": round(seg.end, 3), "text": text}
+        words = [
+            {"w": (wd.word or "").strip(), "s": round(wd.start, 3), "e": round(wd.end, 3)}
+            for wd in (seg.words or [])
+            if (wd.word or "").strip()
+        ]
+        if words:
+            entry["words"] = words
+        result.append(entry)
 
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)

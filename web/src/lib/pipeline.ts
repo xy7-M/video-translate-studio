@@ -4,7 +4,13 @@ import fs from "fs";
 import path from "path";
 import { deepseekJson } from "./deepseek";
 
-export type Segment = { start: number; end: number; text: string; zh?: string };
+export type Segment = {
+  start: number;
+  end: number;
+  text: string;
+  zh?: string;
+  words?: { w: string; s: number; e: number }[]; // whisper 词级时间戳（断句后即剥离，不入库）
+};
 
 /** AI 课堂摘要：要点 / 教授强调 / 待办行动项 */
 export type Summary = {
@@ -321,23 +327,137 @@ export async function transcribe(taskId: string) {
       HF_HOME: path.join(DATA_DIR, "hf_cache"),
     },
   });
-  const segments = JSON.parse(fs.readFileSync(outJson, "utf-8")) as Segment[];
+  const segments = resegmentSegments(JSON.parse(fs.readFileSync(outJson, "utf-8")) as Segment[]);
   updateTask(taskId, { segments, progress: 60, message: `转写完成，共 ${segments.length} 句` });
+}
+
+/**
+ * 按句号/问号、逗号与语音停顿，把 whisper 的长段重切成「有呼吸感」的短句。
+ * 依赖词级时间戳（transcribe.py 已开启）；无词级时间戳的旧数据原样保留。
+ * 输出不含 words 字段，顺带完成标点归一（" foo ." → "foo."）。
+ */
+export function resegmentSegments(segs: Segment[]): Segment[] {
+  const MIN_CHARS = 10; // 短于此不断句（避免 "OK." 独占一行）
+  const MAX_CHARS = 46; // 硬上限：无标点也要换气
+  // 以这些词结尾的行语义未完，停顿再大也不断行（防止 "using physical / properties" 式腰斩）
+  const DANGLE = new Set([
+    "the", "a", "an", "of", "and", "or", "but", "to", "in", "on", "at", "for", "with", "by", "as",
+    "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did",
+    "will", "would", "can", "could", "may", "might", "should",
+    "we", "you", "they", "it", "i", "he", "she",
+    "this", "that", "these", "those", "there", "here",
+    "my", "our", "your", "their", "his", "her", "its",
+    "using", "like", "from", "into", "about", "what", "which", "who",
+  ]);
+  const raw: Segment[] = [];
+
+  for (const seg of segs) {
+    const words = seg.words;
+    if (!words || words.length === 0) {
+      const text = seg.text.trim();
+      if (text) raw.push({ start: seg.start, end: seg.end, text });
+      continue;
+    }
+    let cur: { w: string; s: number; e: number }[] = [];
+    const flush = () => {
+      if (!cur.length) return;
+      const text = cur
+        .map((x) => x.w)
+        .join(" ")
+        .replace(/\s+([,.!?;:])/g, "$1")
+        .replace(/([,.!?;:])(?=\S)/g, "$1 ")
+        .trim();
+      if (text) raw.push({ start: cur[0].s, end: cur[cur.length - 1].e, text });
+      cur = [];
+    };
+    for (let i = 0; i < words.length; i++) {
+      const wd = words[i];
+      cur.push(wd);
+      const len = cur.reduce((a, x) => a + x.w.length + 1, 0);
+      const gap = i + 1 < words.length ? words[i + 1].s - wd.e : 99;
+      const dangling = DANGLE.has(wd.w.replace(/[.,!?;:]$/, "").toLowerCase());
+      if (
+        (/[.!?]$/.test(wd.w) && len >= MIN_CHARS) ||
+        len >= MAX_CHARS ||
+        (/[,;]$/.test(wd.w) && len >= 26) ||
+        (gap >= 0.6 && len >= MIN_CHARS && !dangling)
+      ) {
+        flush();
+      }
+    }
+    flush();
+  }
+
+  // 碎片并入上一行，避免一闪而过的半句；但合并后不得超过 54 字符
+  const out: Segment[] = [];
+  for (const s of raw) {
+    const prev = out[out.length - 1];
+    if (prev && (s.text.length < 18 || s.end - s.start < 0.6) && prev.text.length + s.text.length <= 54) {
+      prev.text = `${prev.text} ${s.text}`;
+      prev.end = Math.max(prev.end, s.end);
+    } else {
+      out.push({ ...s });
+    }
+  }
+  return out;
+}
+
+/**
+ * 标点补全：whisper small 常漏句号/逗号，按行批量交给 DeepSeek 复原。
+ * 只加标点与首字母大写，严禁改词、增删词，保证行数与英文内容不变。
+ */
+export async function punctuate(segs: Segment[], onProgress?: (done: number) => void): Promise<Segment[]> {
+  const BATCH = 30;
+  const out = segs.map((s) => ({ ...s }));
+  for (let i = 0; i < out.length; i += BATCH) {
+    const batch = out.slice(i, i + BATCH);
+    try {
+      const data = await deepseekJson(
+        "你是英文字幕标点校对员。输入是带序号的字幕行数组。为每一行补上正确的英文标点：" +
+          "完整句子结尾加句号（问句用问号），从句与列举之间加逗号，句首字母大写。" +
+          "严格禁止：改写、增加、删除任何单词，改变行序或行数。" +
+          "只输出 JSON：{\"items\":[{\"n\":序号,\"en\":\"加好标点的原句\"}]}",
+        JSON.stringify({ items: batch.map((s, n) => ({ n, en: s.text })) }),
+        0
+      );
+      const items = (data.items || []) as { n: number; en: string }[];
+      for (const it of items) {
+        const idx = i + (it.n ?? 0);
+        const next = String(it.en || "").trim();
+        // 仅在词数一致时接受，防止模型擅自改写
+        if (idx < out.length && next && next.split(/\s+/).length === out[idx].text.split(/\s+/).length) {
+          out[idx].text = next;
+        }
+      }
+    } catch {
+      /* 单批失败保留原标点，继续下一批 */
+    }
+    onProgress?.(Math.min(i + BATCH, out.length));
+  }
+  return out;
 }
 
 /** 阶段三：DeepSeek 批量翻译 */
 export async function translate(taskId: string) {
   const t = getTask(taskId);
   if (!t || !t.segments) throw new Error("segments missing");
-  updateTask(taskId, { status: "translating", progress: 65, message: "DeepSeek 翻译中…" });
+  updateTask(taskId, { status: "translating", progress: 62, message: "DeepSeek 校对英文标点…" });
 
-  const segs = t.segments;
+  // 先复原英文标点（只加标点不改词），再逐行翻译
+  const segs = await punctuate(t.segments);
+  updateTask(taskId, { segments: segs, progress: 68, message: "标点校对完成，中文翻译中…" });
+
   const BATCH = 20;
   for (let i = 0; i < segs.length; i += BATCH) {
     const batch = segs.slice(i, i + BATCH);
     const payload = batch.map((s, n) => ({ n, en: s.text }));
     const data = await deepseekJson(
-      "你是短视频字幕翻译。把英文字幕翻译成简体中文，要求：口语化、贴合原意、简洁（每条不超过20字），保留专有名词原文。只输出 JSON：{\"items\":[{\"n\":序号,\"zh\":\"译文\"}]}",
+      "你是短视频双语字幕翻译。输入是按时间顺序切分的英文字幕短句（每行可能只有半句，上一行与下一行连读成完整句子）。要求：" +
+        "1) 严格逐行对应：每个 n 输出一条 zh，不得合并、拆分或遗漏行；" +
+        "2) 只翻译该行英文的内容，不要借用相邻行的信息，也不要自行补全半句；" +
+        "3) 口语化、贴合原意、简洁（每条不超过 18 字），保留专有名词原文；" +
+        "4) 中文标点用全角，句内该断则断（逗号、顿号），行尾不加句号。" +
+        "只输出 JSON：{\"items\":[{\"n\":序号,\"zh\":\"译文\"}]}",
       JSON.stringify({ items: payload })
     );
     const parsed = data as { items?: { n: number; zh: string }[] };
@@ -346,7 +466,7 @@ export async function translate(taskId: string) {
       if (segs[idx]) segs[idx].zh = String(item.zh || "").trim();
     }
     updateTask(taskId, {
-      progress: 65 + Math.round(((i + BATCH) / segs.length) * 20),
+      progress: 68 + Math.round(((i + BATCH) / segs.length) * 17),
       message: `翻译中 ${Math.min(i + BATCH, segs.length)}/${segs.length}`,
     });
   }
@@ -659,6 +779,32 @@ export function retrieveCorpus(query: string, course?: string): string {
     .slice(0, 12)
     .map((x) => `【${x.title || x.taskId}】\n${x.text}`)
     .join("\n\n");
+}
+
+/**
+ * 重跑字幕：用当前最新的断句/翻译规则重新转写+翻译（音轨已抽取则跳过 ffmpeg）。
+ * AI 笔记与词表不受影响；旧烧录视频失效，需重新烧录。
+ */
+export async function reprocessSubtitles(taskId: string) {
+  const t = getTask(taskId);
+  if (!t) throw new Error("task not found");
+  if (["queued", "extracting", "transcribing", "translating", "analyzing", "burning"].includes(t.status)) {
+    throw new Error("任务正在处理中，请稍后再试");
+  }
+  try {
+    if (!t.audioFile || !fs.existsSync(t.audioFile)) await extractAudio(taskId);
+    await transcribe(taskId);
+    await translate(taskId);
+    updateTask(taskId, {
+      status: "ready",
+      progress: 92,
+      srtFile: undefined,
+      burnedFile: undefined,
+      message: "双语字幕已按新规则重新生成",
+    });
+  } catch (e) {
+    updateTask(taskId, { status: "error", error: e instanceof Error ? e.message : String(e), message: "重跑字幕失败" });
+  }
 }
 
 /** 总编排：上传后自动跑 抽取→转写→翻译→AI 笔记 */
