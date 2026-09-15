@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase";
-import { Mail, Lock, LogIn, UserPlus, CheckCircle2 } from "lucide-react";
+import { Mail, Lock, LogIn, UserPlus, CheckCircle2, ShieldCheck, ArrowLeft } from "lucide-react";
 
 const ic = { size: 15, strokeWidth: 1.75, className: "shrink-0" } as const;
 
@@ -11,15 +11,17 @@ const ic = { size: 15, strokeWidth: 1.75, className: "shrink-0" } as const;
 function mapAuthError(msg: string): string {
   const m = msg.toLowerCase();
   if (m.includes("invalid login credentials"))
-    return "邮箱或密码不正确（若刚注册，请先点击验证邮件里的确认链接）";
+    return "邮箱或密码不正确";
   if (m.includes("email not confirmed") || m.includes("confirm your email"))
-    return "邮箱尚未验证：请查收验证邮件并点击确认链接，本窗口会自动登录";
+    return "邮箱尚未验证：请先完成注册第二步的验证码";
   if (m.includes("already registered") || m.includes("already been registered") || m.includes("already exists"))
     return "该邮箱已注册，请切换到「登录」";
   if (m.includes("invalid format") || m.includes("validate email"))
     return "邮箱格式不正确，请填写完整邮箱（如 xxx@qq.com）";
   if (m.includes("rate limit") || m.includes("too many") || m.includes("exceeded"))
     return "操作太频繁，请稍后再试（免费发信通道限流约 2 封/小时）";
+  if (m.includes("invalid or expired otp") || m.includes("token has expired") || m.includes("otp"))
+    return "验证码不正确或已过期，请重新发送";
   if (m.includes("password"))
     return "密码不符合要求（至少 6 位）";
   if (m.includes("failed to fetch") || m.includes("networkerror"))
@@ -27,7 +29,10 @@ function mapAuthError(msg: string): string {
   return msg;
 }
 
-/** 登录 / 注册卡（纸墨手账奶油风），邮箱验证走「浏览器确认 → 本地接力」 */
+const normEmail = (raw: string) => (/^\d{5,11}$/.test(raw.trim()) ? `${raw.trim()}@qq.com` : raw.trim());
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** 登录 / 两步注册卡（纸墨手账奶油风）：注册 = 邮箱密码 → 6 位邮箱验证码 */
 export default function AuthCard({
   onDone,
   mode: initialMode = "login",
@@ -36,14 +41,25 @@ export default function AuthCard({
   mode?: "login" | "register";
 }) {
   const [mode, setMode] = useState<"login" | "register">(initialMode);
+  const [step, setStep] = useState<1 | 2>(1); // 注册第二步：验证码
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [otp, setOtp] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [notice, setNotice] = useState("");
+  const [cooldown, setCooldown] = useState(0);
   const relayTimer = useRef<ReturnType<typeof setInterval>>();
 
-  // 轮询本地服务：一旦浏览器完成邮箱验证并接力 session，就自动登录
+  // 强制注册墙下，若之前有未完成的注册（如已发码），保持从注册页进入
+  useEffect(() => {
+    if (mode === "register" && step === 2 && cooldown > 0) {
+      const t = setInterval(() => setCooldown((c) => Math.max(0, c - 1)), 1000);
+      return () => clearInterval(t);
+    }
+  }, [mode, step, cooldown]);
+
+  // 轮询本地服务：兼容旧的「浏览器确认链接」接力（若仍有用户卡在那一步）
   useEffect(() => {
     relayTimer.current = setInterval(async () => {
       try {
@@ -64,20 +80,27 @@ export default function AuthCard({
     return () => clearInterval(relayTimer.current);
   }, [onDone]);
 
-  const submit = async () => {
+  const resetForm = () => {
     setErr("");
     setNotice("");
-    let e = email.trim();
+    setOtp("");
+  };
+
+  const switchMode = (m: "login" | "register") => {
+    setMode(m);
+    setStep(1);
+    resetForm();
+  };
+
+  /** 注册第一步：提交邮箱密码（Supabase 发 6 位验证码邮件），进入第二步 */
+  const submitRegisterStep1 = async () => {
+    resetForm();
+    const e = normEmail(email);
     if (!e || !password) {
       setErr("请填写邮箱和密码");
       return;
     }
-    // 只填了 QQ 号 / 手机号等没带域名时，自动补全常见邮箱后缀
-    if (/^\d{5,11}$/.test(e)) {
-      e = `${e}@qq.com`;
-      setEmail(e);
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) {
+    if (!EMAIL_RE.test(e)) {
       setErr("邮箱格式不正确，请填写完整邮箱（如 xxx@qq.com）");
       return;
     }
@@ -92,28 +115,101 @@ export default function AuthCard({
     }
     setBusy(true);
     try {
-      if (mode === "login") {
-        const { data, error } = await sb.auth.signInWithPassword({ email: e, password });
-        if (error) throw error;
-        if (data.session) onDone(data.session);
-      } else {
-        const redirectTo = `${window.location.origin}/confirm`;
-        const { data, error } = await sb.auth.signUp({ email: e, password, options: { emailRedirectTo: redirectTo } });
-        if (error) throw error;
-        if (data.session) {
-          // 未开启邮箱验证时直接登录
-          onDone(data.session);
-        } else {
-          setNotice(`验证邮件已发至 ${e}，请在浏览器中点击确认，本窗口会自动登录。`);
-        }
+      const { data, error } = await sb.auth.signUp({ email: e, password });
+      if (error) throw error;
+      if (data.session) {
+        // 兜底：若云端没开邮箱验证，直接登录成功
+        onDone(data.session);
+        return;
       }
+      setEmail(e);
+      setStep(2);
+      setNotice(`验证码已发送至 ${e}（含垃圾箱），6 位数字，1 小时内有效。`);
+      setCooldown(60);
     } catch (raw) {
-      const msg = raw instanceof Error ? raw.message : String(raw);
-      setErr(mapAuthError(msg));
+      setErr(mapAuthError(raw instanceof Error ? raw.message : String(raw)));
     } finally {
       setBusy(false);
     }
   };
+
+  /** 注册第二步：校验 6 位验证码 */
+  const submitRegisterStep2 = async () => {
+    resetForm();
+    const code = otp.trim();
+    if (!/^\d{6}$/.test(code)) {
+      setErr("请输入 6 位数字验证码");
+      return;
+    }
+    const sb = await getSupabase();
+    if (!sb) {
+      setErr("登录服务未配置");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { data, error } = await sb.auth.verifyOtp({ email, token: code, type: "signup" });
+      if (error) throw error;
+      if (!data.session) throw new Error("验证失败，请重新发送验证码");
+      onDone(data.session);
+    } catch (raw) {
+      setErr(mapAuthError(raw instanceof Error ? raw.message : String(raw)));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** 重新发送验证码 */
+  const resendOtp = async () => {
+    if (cooldown > 0 || busy) return;
+    resetForm();
+    const sb = await getSupabase();
+    if (!sb) return;
+    setBusy(true);
+    try {
+      const { error } = await sb.auth.resend({ type: "signup", email });
+      if (error) throw error;
+      setNotice(`验证码已重新发送至 ${email}。`);
+      setCooldown(60);
+    } catch (raw) {
+      setErr(mapAuthError(raw instanceof Error ? raw.message : String(raw)));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitLogin = async () => {
+    resetForm();
+    const e = normEmail(email);
+    if (!e || !password) {
+      setErr("请填写邮箱和密码");
+      return;
+    }
+    if (!EMAIL_RE.test(e)) {
+      setErr("邮箱格式不正确，请填写完整邮箱（如 xxx@qq.com）");
+      return;
+    }
+    const sb = await getSupabase();
+    if (!sb) {
+      setErr("登录服务未配置");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { data, error } = await sb.auth.signInWithPassword({ email: e, password });
+      if (error) throw error;
+      if (data.session) onDone(data.session);
+    } catch (raw) {
+      setErr(mapAuthError(raw instanceof Error ? raw.message : String(raw)));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const inputCls =
+    "flex-1 min-w-0 bg-transparent outline-none text-sm placeholder:text-[var(--muted)]";
+  const fieldCls =
+    "flex items-center gap-2 border border-[var(--line)] rounded-full px-4 py-2.5 focus-within:border-[var(--accent)] transition-colors duration-150";
 
   return (
     <div className="w-full">
@@ -128,50 +224,89 @@ export default function AuthCard({
           <p className="text-xs text-[var(--muted)]">登录后即可使用 AI 翻译与课堂笔记</p>
         </div>
 
-        {/* 模式切换 */}
-        <div className="flex rounded-full border-[1.5px] border-[var(--line)] p-1 text-sm">
-          {(["login", "register"] as const).map((m) => (
+        {/* 注册第二步：顶部步骤指示 + 返回 */}
+        {mode === "register" && step === 2 ? (
+          <div className="flex items-center gap-2 text-sm">
             <button
-              key={m}
               onClick={() => {
-                setMode(m);
-                setErr("");
-                setNotice("");
+                setStep(1);
+                resetForm();
               }}
-              className={`flex-1 py-1.5 rounded-full transition-all duration-150 ${
-                mode === m ? "bg-[var(--accent)] text-white" : "text-[var(--muted)]"
-              }`}
+              className="text-[var(--muted)] hover:text-[var(--text)] inline-flex items-center gap-1"
             >
-              {m === "login" ? "登录" : "注册"}
+              <ArrowLeft size={14} strokeWidth={1.75} /> 返回
             </button>
-          ))}
-        </div>
+            <span className="flex-1 text-center mono text-xs text-[var(--muted)]">
+              第 2 步 / 共 2 步 · 邮箱验证码
+            </span>
+          </div>
+        ) : (
+          <div className="flex rounded-full border-[1.5px] border-[var(--line)] p-1 text-sm">
+            {(["login", "register"] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => switchMode(m)}
+                className={`flex-1 py-1.5 rounded-full transition-all duration-150 ${
+                  mode === m ? "bg-[var(--accent)] text-white" : "text-[var(--muted)]"
+                }`}
+              >
+                {m === "login" ? "登录" : "注册"}
+              </button>
+            ))}
+          </div>
+        )}
 
-        <div className="space-y-3">
-          <label className="flex items-center gap-2 border border-[var(--line)] rounded-full px-4 py-2.5 focus-within:border-[var(--accent)] transition-colors duration-150">
-            <Mail {...ic} className="text-[var(--muted)]" />
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="邮箱"
-              autoComplete="email"
-              className="flex-1 min-w-0 bg-transparent outline-none text-sm placeholder:text-[var(--muted)]"
-            />
-          </label>
-          <label className="flex items-center gap-2 border border-[var(--line)] rounded-full px-4 py-2.5 focus-within:border-[var(--accent)] transition-colors duration-150">
-            <Lock {...ic} className="text-[var(--muted)]" />
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && submit()}
-              placeholder="密码（至少 6 位）"
-              autoComplete={mode === "login" ? "current-password" : "new-password"}
-              className="flex-1 min-w-0 bg-transparent outline-none text-sm placeholder:text-[var(--muted)]"
-            />
-          </label>
-        </div>
+        {mode === "register" && step === 2 ? (
+          /* ── 注册第二步：验证码 ── */
+          <div className="space-y-3">
+            <label className={`${fieldCls} justify-center`}>
+              <ShieldCheck {...ic} className="text-[var(--muted)]" />
+              <input
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                onKeyDown={(e) => e.key === "Enter" && submitRegisterStep2()}
+                placeholder="6 位验证码"
+                inputMode="numeric"
+                autoFocus
+                className={`${inputCls} text-center tracking-[0.5em] text-lg font-medium`}
+              />
+            </label>
+            <button
+              onClick={resendOtp}
+              disabled={busy || cooldown > 0}
+              className="text-xs text-[var(--muted)] hover:text-[var(--text)] underline underline-offset-2 disabled:no-underline disabled:opacity-50"
+            >
+              {cooldown > 0 ? `重新发送（${cooldown}s）` : "没收到？重新发送验证码"}
+            </button>
+          </div>
+        ) : (
+          /* ── 登录 / 注册第一步：邮箱 + 密码 ── */
+          <div className="space-y-3">
+            <label className={fieldCls}>
+              <Mail {...ic} className="text-[var(--muted)]" />
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="邮箱（QQ 号可自动补 @qq.com）"
+                autoComplete="email"
+                className={inputCls}
+              />
+            </label>
+            <label className={fieldCls}>
+              <Lock {...ic} className="text-[var(--muted)]" />
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && (mode === "login" ? submitLogin() : submitRegisterStep1())}
+                placeholder="密码（至少 6 位）"
+                autoComplete={mode === "login" ? "current-password" : "new-password"}
+                className={inputCls}
+              />
+            </label>
+          </div>
+        )}
 
         {err && (
           <p className="text-xs leading-relaxed" style={{ color: "var(--err)" }}>
@@ -185,8 +320,16 @@ export default function AuthCard({
           </p>
         )}
 
-        <button className="btn-primary w-full justify-center" onClick={submit} disabled={busy}>
-          {busy ? "处理中…" : mode === "login" ? <><LogIn {...ic} /> 登录</> : <><UserPlus {...ic} /> 注册并发送验证邮件</>}
+        <button
+          className="btn-primary w-full justify-center"
+          onClick={() => {
+            if (mode === "login") submitLogin();
+            else if (step === 1) submitRegisterStep1();
+            else submitRegisterStep2();
+          }}
+          disabled={busy}
+        >
+          {busy ? "处理中…" : mode === "login" ? <><LogIn {...ic} /> 登录</> : step === 1 ? <><UserPlus {...ic} /> 下一步：发送验证码</> : <><ShieldCheck {...ic} /> 完成注册</>}
         </button>
 
         <p className="text-[11px] text-[var(--muted)] mono text-center leading-relaxed">
