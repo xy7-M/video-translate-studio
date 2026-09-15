@@ -7,6 +7,26 @@ import { Mail, Lock, LogIn, UserPlus, CheckCircle2 } from "lucide-react";
 
 const ic = { size: 15, strokeWidth: 1.75, className: "shrink-0" } as const;
 
+/** Supabase 英文报错 → 中文提示（覆盖不到的保留原文，便于排查） */
+function mapAuthError(msg: string): string {
+  const m = msg.toLowerCase();
+  if (m.includes("invalid login credentials"))
+    return "邮箱或密码不正确（若刚注册，请先点击验证邮件里的确认链接）";
+  if (m.includes("email not confirmed") || m.includes("confirm your email"))
+    return "邮箱尚未验证：请查收验证邮件并点击确认链接，本窗口会自动登录";
+  if (m.includes("already registered") || m.includes("already been registered") || m.includes("already exists"))
+    return "该邮箱已注册，请切换到「登录」";
+  if (m.includes("invalid format") || m.includes("validate email"))
+    return "邮箱格式不正确，请填写完整邮箱（如 xxx@qq.com）";
+  if (m.includes("rate limit") || m.includes("too many") || m.includes("exceeded"))
+    return "操作太频繁，请稍后再试（免费发信通道限流约 2 封/小时）";
+  if (m.includes("password"))
+    return "密码不符合要求（至少 6 位）";
+  if (m.includes("failed to fetch") || m.includes("networkerror"))
+    return "网络异常，无法连接登录服务，请检查网络后重试";
+  return msg;
+}
+
 /** 登录 / 注册卡（纸墨手账奶油风），邮箱验证走「浏览器确认 → 本地接力」 */
 export default function AuthCard({
   onDone,
@@ -47,9 +67,18 @@ export default function AuthCard({
   const submit = async () => {
     setErr("");
     setNotice("");
-    const e = email.trim();
+    let e = email.trim();
     if (!e || !password) {
       setErr("请填写邮箱和密码");
+      return;
+    }
+    // 只填了 QQ 号 / 手机号等没带域名时，自动补全常见邮箱后缀
+    if (/^\d{5,11}$/.test(e)) {
+      e = `${e}@qq.com`;
+      setEmail(e);
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) {
+      setErr("邮箱格式不正确，请填写完整邮箱（如 xxx@qq.com）");
       return;
     }
     if (password.length < 6) {
@@ -80,17 +109,7 @@ export default function AuthCard({
       }
     } catch (raw) {
       const msg = raw instanceof Error ? raw.message : String(raw);
-      setErr(
-        msg.includes("Invalid login credentials")
-          ? "邮箱或密码不正确（若刚注册，请先点击验证邮件里的确认链接）"
-          : msg.includes("Email not confirmed") || msg.includes("confirm your email")
-          ? "邮箱尚未验证：请查收验证邮件并点击确认链接，或回到注册页重新发送"
-          : msg.includes("already registered") || msg.includes("already been registered")
-          ? "该邮箱已注册，请切换到「登录」"
-          : msg.includes("rate limit") || msg.includes("Email rate limit")
-          ? "发信太频繁，请稍后再试（免费 SMTP 限流约 2 封/小时）"
-          : msg
-      );
+      setErr(mapAuthError(msg));
     } finally {
       setBusy(false);
     }

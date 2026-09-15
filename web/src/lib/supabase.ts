@@ -39,7 +39,8 @@ export async function getSupabase(): Promise<SupabaseClient | null> {
 
   // 桌面版：先用本地文件里已有的会话水合到内存，再交给 supabase-js
   const saved = await bridge.get().catch(() => null);
-  const STORAGE_KEY = `sb-${new URL(url).hostname}-auth-token`;
+  // 必须与 supabase-js 内部 defaultStorageKey 完全一致：sb-{hostname首段}-auth-token
+  const STORAGE_KEY = `sb-${new URL(url).hostname.split(".")[0]}-auth-token`;
   if (saved) memoryStore.set(STORAGE_KEY, saved);
 
   client = createClient(url, anon, {
