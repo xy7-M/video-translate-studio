@@ -29,8 +29,15 @@ export const useAuth = () => useContext(Ctx);
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
+  const [isConfirmPage, setIsConfirmPage] = useState(false);
 
   useEffect(() => {
+    // /confirm 是邮箱验证落地页（系统浏览器打开），必须绕过强制注册墙
+    if (window.location.pathname.startsWith("/confirm")) {
+      setIsConfirmPage(true);
+      setReady(true);
+      return;
+    }
     let off = () => {};
     getSupabase().then((sb) => {
       if (!sb) {
@@ -72,7 +79,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     <Ctx.Provider value={{ session, ready, openLogin: () => {}, signOut }}>
       {children}
       {/* 未登录时强制弹出注册弹窗：无关闭按钮、点遮罩不关闭，注册/登录可切换 */}
-      {ready && !session && (
+      {ready && !session && !isConfirmPage && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto"
           style={{ background: "rgba(28,25,17,0.45)" }}

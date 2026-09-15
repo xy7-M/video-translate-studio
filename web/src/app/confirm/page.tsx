@@ -36,18 +36,27 @@ function ConfirmInner() {
 
       try {
         if (code) {
+          // PKCE 兜底（仅当确认链接与应用窗口同上下文时才可能成功）
           const { data, error } = await sb.auth.exchangeCodeForSession(code);
           if (error) throw error;
           if (!data.session) throw new Error("未获得会话");
           await relay(JSON.stringify(data.session));
         } else if (url.hash.includes("access_token")) {
-          // implicit 兜底：hash 片段本身就是 session 载荷
+          // implicit：确认链接的 hash 片段本身就是 session 载荷，直接解析接力，
+          // 不依赖 getSession()（那是另一个浏览器上下文，内存里没有这个会话）
           const frag = new URLSearchParams(url.hash.replace(/^#/, ""));
           const accessToken = frag.get("access_token");
+          const refreshToken = frag.get("refresh_token");
           if (!accessToken) throw new Error("缺少 access_token");
-          const { data, error } = await sb.auth.getSession();
-          if (error) throw error;
-          await relay(JSON.stringify(data.session ?? { access_token: accessToken }));
+          const expiresIn = Number(frag.get("expires_in") || "3600");
+          const session = {
+            access_token: accessToken,
+            refresh_token: refreshToken || "",
+            token_type: frag.get("token_type") || "bearer",
+            expires_in: expiresIn,
+            expires_at: Math.floor(Date.now() / 1000) + expiresIn,
+          };
+          await relay(JSON.stringify(session));
         } else {
           setState("error");
           setMsg("链接不完整，请回到应用重新发送验证邮件。");

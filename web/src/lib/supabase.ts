@@ -32,7 +32,7 @@ export async function getSupabase(): Promise<SupabaseClient | null> {
 
   if (!bridge) {
     client = createClient(url, anon, {
-      auth: { storage: memStorage, persistSession: true, detectSessionInUrl: false },
+      auth: { storage: memStorage, persistSession: true, detectSessionInUrl: false, flowType: "implicit" },
     });
     return client;
   }
@@ -43,7 +43,7 @@ export async function getSupabase(): Promise<SupabaseClient | null> {
   if (saved) memoryStore.set(STORAGE_KEY, saved);
 
   client = createClient(url, anon, {
-    auth: { storage: memStorage, persistSession: true, detectSessionInUrl: false },
+    auth: { storage: memStorage, persistSession: true, detectSessionInUrl: false, flowType: "implicit" },
   });
 
   // 会话变化（登录/刷新/登出）时同步落盘

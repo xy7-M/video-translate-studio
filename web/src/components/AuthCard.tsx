@@ -82,9 +82,11 @@ export default function AuthCard({
       const msg = raw instanceof Error ? raw.message : String(raw);
       setErr(
         msg.includes("Invalid login credentials")
-          ? "邮箱或密码不正确"
+          ? "邮箱或密码不正确（若刚注册，请先点击验证邮件里的确认链接）"
+          : msg.includes("Email not confirmed") || msg.includes("confirm your email")
+          ? "邮箱尚未验证：请查收验证邮件并点击确认链接，或回到注册页重新发送"
           : msg.includes("already registered") || msg.includes("already been registered")
-          ? "该邮箱已注册，请直接登录"
+          ? "该邮箱已注册，请切换到「登录」"
           : msg.includes("rate limit") || msg.includes("Email rate limit")
           ? "发信太频繁，请稍后再试（免费 SMTP 限流约 2 封/小时）"
           : msg
