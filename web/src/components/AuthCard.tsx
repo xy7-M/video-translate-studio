@@ -19,7 +19,7 @@ function mapAuthError(msg: string): string {
   if (m.includes("invalid format") || m.includes("validate email"))
     return "邮箱格式不正确，请填写完整邮箱（如 xxx@qq.com）";
   if (m.includes("rate limit") || m.includes("too many") || m.includes("exceeded"))
-    return "操作太频繁，请稍后再试（免费发信通道限流约 2 封/小时）";
+    return "操作太频繁，请稍后再试（发信通道有限流，等一两分钟即可）";
   if (m.includes("invalid or expired otp") || m.includes("token has expired") || m.includes("otp"))
     return "验证码不正确或已过期，请重新发送";
   if (m.includes("password"))
@@ -51,7 +51,7 @@ export default function AuthCard({
   const [cooldown, setCooldown] = useState(0);
   const relayTimer = useRef<ReturnType<typeof setInterval>>();
 
-  // 强制注册墙下，若之前有未完成的注册（如已发码），保持从注册页进入
+  // 重发验证码的 60 秒冷却倒计时
   useEffect(() => {
     if (mode === "register" && step === 2 && cooldown > 0) {
       const t = setInterval(() => setCooldown((c) => Math.max(0, c - 1)), 1000);
@@ -124,7 +124,7 @@ export default function AuthCard({
       }
       setEmail(e);
       setStep(2);
-      setNotice(`验证码已发送至 ${e}（含垃圾箱），6 位数字，1 小时内有效。`);
+      setNotice(`验证码已发送至 ${e}（含垃圾箱），6 位数字，10 分钟内有效。`);
       setCooldown(60);
     } catch (raw) {
       setErr(mapAuthError(raw instanceof Error ? raw.message : String(raw)));
@@ -288,7 +288,7 @@ export default function AuthCard({
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="邮箱（QQ 号可自动补 @qq.com）"
+                placeholder="邮箱（支持QQ邮箱）"
                 autoComplete="email"
                 className={inputCls}
               />
