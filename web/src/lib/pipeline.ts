@@ -73,6 +73,9 @@ export const MODEL_SIZE = process.env.WHISPER_MODEL || "small";
 
 for (const d of [UPLOAD_DIR, WORK_DIR, OUT_DIR, TASK_DIR]) fs.mkdirSync(d, { recursive: true });
 
+// 任务 id 白名单：randomUUID 截断 + 下划线/连字符，杜绝 ../ 路径注入
+const ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
+
 // 任务持久化到磁盘：dev 模式下 Next.js 热重编译会清空模块级内存，必须落盘
 function taskPath(id: string) {
   return path.join(TASK_DIR, `${id}.json`);
@@ -108,6 +111,7 @@ export function listTasks(): Task[] {
 }
 
 export function getTask(id: string): Task | undefined {
+  if (!ID_RE.test(id)) return undefined;
   const p = taskPath(id);
   if (!fs.existsSync(p)) return undefined;
   try {
@@ -118,6 +122,7 @@ export function getTask(id: string): Task | undefined {
 }
 
 export function updateTask(id: string, patch: Partial<Task>) {
+  if (!ID_RE.test(id)) return undefined;
   const t = getTask(id);
   if (t) {
     Object.assign(t, patch);
@@ -475,9 +480,11 @@ export async function translate(taskId: string) {
   updateTask(taskId, { segments: segs, progress: 68, message: "标点校对完成，中文翻译中…" });
 
   const BATCH = 20;
+  const total = segs.length || 1;
   for (let i = 0; i < segs.length; i += BATCH) {
     const batch = segs.slice(i, i + BATCH);
     const payload = batch.map((s, n) => ({ n, en: s.text }));
+    try {
     const data = await deepseekJson(
       "你是短视频双语字幕翻译。输入是按时间顺序切分的英文字幕短句（每行可能只有半句，上一行与下一行连读成完整句子）。要求：" +
         "1) 严格逐行对应：每个 n 输出一条 zh，不得合并、拆分或遗漏行；" +
@@ -492,8 +499,11 @@ export async function translate(taskId: string) {
       const idx = i + (item.n ?? 0);
       if (segs[idx]) segs[idx].zh = String(item.zh || "").trim();
     }
+    } catch {
+      /* 单批翻译失败保留英文原文，继续下一批（与标点校对同样的容错策略） */
+    }
     updateTask(taskId, {
-      progress: 68 + Math.round(((i + BATCH) / segs.length) * 17),
+      progress: 68 + Math.round(Math.min(1, (i + BATCH) / total) * 17),
       message: `翻译中 ${Math.min(i + BATCH, segs.length)}/${segs.length}`,
     });
   }
@@ -569,10 +579,13 @@ export async function analyze(taskId: string) {
 
 /** SRT 工具 */
 function fmtTime(sec: number): string {
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = Math.floor(sec % 60);
-  const ms = Math.round((sec - Math.floor(sec)) * 1000);
+  // 先把秒四舍五入成整数毫秒再逐级进位：
+  // 直接取小数部分 round 会在 0.9995s 这类边界得到 ",1000" 非法时间戳
+  const msTotal = Math.round(Math.max(0, sec) * 1000);
+  const h = Math.floor(msTotal / 3_600_000);
+  const m = Math.floor((msTotal % 3_600_000) / 60_000);
+  const s = Math.floor((msTotal % 60_000) / 1000);
+  const ms = msTotal % 1000;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")},${String(ms).padStart(3, "0")}`;
 }
 
@@ -580,6 +593,21 @@ export function buildSrt(segs: Segment[]): string {
   return segs
     .map((s, i) => `${i + 1}\n${fmtTime(s.start)} --> ${fmtTime(s.end)}\n${s.text}\n${s.zh || ""}\n`)
     .join("\n");
+}
+
+/** 纯文本双语对照字幕：记事本/WPS 可直接打开阅读 */
+function fmtShort(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+export function buildTxt(title: string, segs: Segment[]): string {
+  const head = `${title || "字幕文本"} · 双语字幕（共 ${segs.length} 句）\n${"=".repeat(40)}\n\n`;
+  const body = segs
+    .map((s, i) => `${i + 1}. [${fmtShort(s.start)} → ${fmtShort(s.end)}]\n${s.text}\n${s.zh || ""}\n`)
+    .join("\n");
+  return head + body;
 }
 
 export function writeSrt(taskId: string): string {
@@ -593,11 +621,12 @@ export function writeSrt(taskId: string): string {
 
 /** ASS 时间戳：H:MM:SS.cc（厘秒），电影字幕标准精度 */
 function fmtAssTime(sec: number): string {
-  const s = Math.max(0, sec);
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const ss = Math.floor(s % 60);
-  const cs = Math.round((s - Math.floor(s)) * 100);
+  // 先四舍五入成整数厘秒再逐级进位，避免边界上出现 ".100" 非法字段
+  const total = Math.round(Math.max(0, sec) * 100);
+  const h = Math.floor(total / 360000);
+  const m = Math.floor((total % 360000) / 6000);
+  const ss = Math.floor((total % 6000) / 100);
+  const cs = total % 100;
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${h}:${pad(m)}:${pad(ss)}.${pad(cs)}`;
 }
@@ -652,43 +681,55 @@ export function writeAss(taskId: string): string {
   return file;
 }
 
+/** 正在烧录的任务：防止连点按钮并发拉起两个 ffmpeg 写同一个输出文件 */
+const burningTasks = new Set<string>();
+
 /** 阶段四：烧录双语字幕（优先 NVENC 显卡编码，失败回退 libx264） */
 export async function burnSubtitles(taskId: string) {
+  if (burningTasks.has(taskId)) return; // 已有一个烧录进程在跑
   const t = getTask(taskId);
   if (!t) throw new Error("task not found");
   if (!t.segments) throw new Error("segments missing");
+  burningTasks.add(taskId);
   updateTask(taskId, { status: "burning", progress: 95, message: "正在烧录字幕视频（GPU 加速）…" });
 
-  const out = path.join(OUT_DIR, `${t.id}.subtitled.mp4`);
-  const ass = writeAss(taskId);
-  // Windows + ffmpeg9：必须 filename='...' 显式命名，正斜杠路径 + 转义盘符冒号（C\:/），
-  // 否则 "C:" 会被当作 original_size 选项解析失败
-  const fwd = ass.replace(/\\/g, "/");
-  const escaped = `${fwd.slice(0, 1)}\\:${fwd.slice(2)}`.replace(/'/g, "\\'");
-  const vf = `ass=filename='${escaped}'`;
-
-  const nvencArgs = [
-    "-y", "-i", t.videoFile, "-vf", vf,
-    "-c:v", "h264_nvenc", "-preset", "p5", "-rc", "vbr", "-cq", "23", "-b:v", "0",
-    "-c:a", "copy", out,
-  ];
-  const cpuArgs = [
-    "-y", "-i", t.videoFile, "-vf", vf,
-    "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
-    "-c:a", "copy", out,
-  ];
-
   try {
-    await run(findFfmpeg(), nvencArgs, { timeoutMs: 60 * 60 * 1000 });
-    updateTask(taskId, { encoder: "h264_nvenc" });
-  } catch {
-    // 无 NVIDIA 显卡 / 驱动异常时回退 CPU 编码
-    updateTask(taskId, { message: "GPU 编码不可用，回退 CPU 编码…" });
-    await run(findFfmpeg(), cpuArgs, { timeoutMs: 90 * 60 * 1000 });
-    updateTask(taskId, { encoder: "libx264" });
-  }
+    const out = path.join(OUT_DIR, `${t.id}.subtitled.mp4`);
+    const ass = writeAss(taskId);
+    // Windows + ffmpeg9：必须 filename='...' 显式命名，正斜杠路径 + 转义盘符冒号（C\:/），
+    // 否则 "C:" 会被当作 original_size 选项解析失败
+    const fwd = ass.replace(/\\/g, "/");
+    const escaped = `${fwd.slice(0, 1)}\\:${fwd.slice(2)}`.replace(/'/g, "\\'");
+    // 关键：录屏/短视频多为 VFR（可变帧率，如 r_frame_rate=60 但实际平均仅几帧），
+    // 直接烧 ASS 会让 libass 按错乱的 PTS 计时 → 字幕卡住、跟不上说话。
+    // 在 ass 前插 fps=30 把视频重采样成恒定帧率（CFR），时间轴才准。
+    const vf = `fps=30,ass=filename='${escaped}'`;
 
-  updateTask(taskId, { burnedFile: out, status: "done", progress: 100, message: "完成" });
+    const nvencArgs = [
+      "-y", "-i", t.videoFile, "-vf", vf,
+      "-c:v", "h264_nvenc", "-preset", "p5", "-rc", "vbr", "-cq", "23", "-b:v", "0",
+      "-c:a", "copy", out,
+    ];
+    const cpuArgs = [
+      "-y", "-i", t.videoFile, "-vf", vf,
+      "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
+      "-c:a", "copy", out,
+    ];
+
+    try {
+      await run(findFfmpeg(), nvencArgs, { timeoutMs: 60 * 60 * 1000 });
+      updateTask(taskId, { encoder: "h264_nvenc" });
+    } catch {
+      // 无 NVIDIA 显卡 / 驱动异常时回退 CPU 编码
+      updateTask(taskId, { message: "GPU 编码不可用，回退 CPU 编码…" });
+      await run(findFfmpeg(), cpuArgs, { timeoutMs: 90 * 60 * 1000 });
+      updateTask(taskId, { encoder: "libx264" });
+    }
+
+    updateTask(taskId, { burnedFile: out, status: "done", progress: 100, message: "完成" });
+  } finally {
+    burningTasks.delete(taskId);
+  }
 }
 
 /** 生成 Markdown 复习笔记（借鉴 Notta Document Builder：转录 + 摘要 → 结构化文档） */
@@ -837,12 +878,17 @@ export function retrieveCorpus(query: string, course?: string): string {
  * 重跑字幕：用当前最新的断句/翻译规则重新转写+翻译（音轨已抽取则跳过 ffmpeg）。
  * AI 笔记与词表不受影响；旧烧录视频失效，需重新烧录。
  */
+/** 正在重跑字幕的任务：防止并发重跑导致两份管线交错写同一份 task json */
+const reprocessingTasks = new Set<string>();
+
 export async function reprocessSubtitles(taskId: string) {
+  if (reprocessingTasks.has(taskId)) return;
   const t = getTask(taskId);
   if (!t) throw new Error("task not found");
   if (["queued", "extracting", "transcribing", "translating", "analyzing", "burning"].includes(t.status)) {
     throw new Error("任务正在处理中，请稍后再试");
   }
+  reprocessingTasks.add(taskId);
   try {
     if (!t.audioFile || !fs.existsSync(t.audioFile)) await extractAudio(taskId);
     await transcribe(taskId);
@@ -856,6 +902,8 @@ export async function reprocessSubtitles(taskId: string) {
     });
   } catch (e) {
     updateTask(taskId, { status: "error", error: e instanceof Error ? e.message : String(e), message: "重跑字幕失败" });
+  } finally {
+    reprocessingTasks.delete(taskId);
   }
 }
 

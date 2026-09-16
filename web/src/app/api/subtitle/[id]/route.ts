@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getTask, buildSrt } from "@/lib/pipeline";
+import { getTask, buildSrt, buildTxt } from "@/lib/pipeline";
 
 export const runtime = "nodejs";
 
@@ -12,10 +12,15 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   const disp = (name: string) =>
     `attachment; filename="${name.replace(/[^\x20-\x7e]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 
-  return new NextResponse("\ufeff" + buildSrt(t.segments), {
+  // ?fmt=txt 导出纯文本双语对照，记事本/WPS 可直接打开；默认仍是 SRT
+  const fmt = new URL(req.url).searchParams.get("fmt");
+  const isTxt = fmt === "txt";
+  const body = isTxt ? buildTxt(t.title || safe, t.segments) : buildSrt(t.segments);
+
+  return new NextResponse("\ufeff" + body, {
     headers: {
       "Content-Type": "text/plain; charset=utf-8",
-      "Content-Disposition": disp(`subtitle-${safe}.srt`),
+      "Content-Disposition": disp(`subtitle-${safe}.${isTxt ? "txt" : "srt"}`),
     },
   });
 }

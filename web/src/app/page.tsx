@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
+  AlignLeft,
   Check,
   Clapperboard,
   Download,
@@ -189,17 +190,39 @@ export default function Home() {
     a.click();
   };
 
+  const downloadTxt = async () => {
+    if (!task) return;
+    const a = document.createElement("a");
+    a.href = `/api/subtitle/${task.id}?fmt=txt`;
+    a.download = `subtitle-${task.title || task.id}.txt`;
+    a.click();
+  };
+
   const burnVideo = async () => {
     if (!task) return;
     setBurning(true);
-    await fetch(`/api/burn/${task.id}`, { method: "POST" }).catch(() => {});
+    // 启动失败（网络断/服务挂）要解除 burning 态，不能傻等轮询
+    const started = await fetch(`/api/burn/${task.id}`, { method: "POST" })
+      .then((r) => r.ok)
+      .catch(() => false);
+    if (!started) {
+      setBurning(false);
+      return;
+    }
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
-      const r = await fetch(`/api/status/${task.id}`);
-      const t: Task = await r.json();
-      setTask(t);
-      if (["done", "error"].includes(t.status)) {
-        clearInterval(pollRef.current);
+      try {
+        const r = await fetch(`/api/status/${task.id}`);
+        if (!r.ok) throw new Error("status failed");
+        const t: Task = await r.json();
+        setTask(t);
+        if (["done", "error"].includes(t.status)) {
+          if (pollRef.current) clearInterval(pollRef.current);
+          setBurning(false);
+        }
+      } catch {
+        // 轮询异常：停止轮询并解除按钮 loading，避免永久卡在「烧录中」
+        if (pollRef.current) clearInterval(pollRef.current);
         setBurning(false);
       }
     }, 2000);
@@ -498,6 +521,9 @@ export default function Home() {
                 <div className="flex flex-wrap gap-3">
                   <button className="btn-primary" onClick={downloadSrt}>
                     <Download {...ic} /> 下载 SRT 字幕
+                  </button>
+                  <button className="btn-ghost" onClick={downloadTxt} title="纯文本双语对照，记事本可直接打开">
+                    <AlignLeft {...ic} /> 字幕 TXT
                   </button>
                   <button className="btn-ghost" onClick={downloadNotes}>
                     <FileText {...ic} /> 复习笔记 MD
