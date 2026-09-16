@@ -62,7 +62,6 @@ export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval>>();
-  const editedRef = useRef(false); // 用户手动改过字幕后，停止用后端数据覆盖前端
 
   const stepIndex = (() => {
     if (!task) return -1;
@@ -84,8 +83,8 @@ export default function Home() {
         const r = await authedFetch(`/api/status/${id}`);
         const t: Task = await r.json();
         setTask(t);
-        // 用户未编辑时，始终以后端最新数据为准（转写→翻译会逐步补上 zh）
-        if (t.segments && !editedRef.current) setSegs(t.segments);
+        // 以后端最新数据为准（转写→翻译会逐步补上 zh）
+        if (t.segments) setSegs(t.segments);
         if (["ready", "error", "done"].includes(t.status)) {
           clearInterval(pollRef.current);
         }
@@ -104,7 +103,6 @@ export default function Home() {
     setUploading(true);
     setTask(null);
     setSegs([]);
-    editedRef.current = false;
     const form = new FormData();
     form.append("video", file);
     try {
@@ -121,38 +119,17 @@ export default function Home() {
   };
 
 
-  /** 导出 SRT：有编辑时先同步到后端，保证导出内容与界面一致 */
-  const syncEdits = async () => {
-    if (!task) return;
-    if (editedRef.current) {
-      await fetch(`/api/segments/${task.id}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ segments: segs }),
-      }).catch(() => {});
-    }
-  };
-
   const downloadSrt = async () => {
     if (!task) return;
-    await syncEdits();
     const a = document.createElement("a");
     a.href = `/api/subtitle/${task.id}`;
     a.download = `subtitle-${task.title || task.id}.srt`;
     a.click();
   };
 
-  const pushEditsAndBurn = async () => {
+  const burnVideo = async () => {
     if (!task) return;
     setBurning(true);
-    // 先把编辑同步到后端，再触发烧录
-    if (editedRef.current) {
-      await fetch(`/api/segments/${task.id}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ segments: segs }),
-      }).catch(() => {});
-    }
     await fetch(`/api/burn/${task.id}`, { method: "POST" }).catch(() => {});
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
@@ -175,7 +152,6 @@ export default function Home() {
     }
     const r = await authedFetch(`/api/reprocess/${task.id}`, { method: "POST" }).catch(() => null);
     if (!r?.ok) return;
-    editedRef.current = false; // 重跑后以后端新字幕为准
     poll(task.id);
   };
 
@@ -186,7 +162,6 @@ export default function Home() {
       const r = await fetch(`/api/status/${id}`);
       const t: Task = await r.json();
       if (!r.ok) return;
-      editedRef.current = false;
       setTask(t);
       setSegs(t.segments || []);
       setView("work");
@@ -413,7 +388,7 @@ export default function Home() {
                 <p className="text-sm text-[var(--muted)] mt-1 inline-flex items-center gap-1.5">
                   双语字幕已生成
                   <Check size={14} strokeWidth={2.5} className="text-[var(--ok)]" />
-                  · 共 {segs.length} 句 · 名称可编辑，导出时以编辑内容为准
+                  · 共 {segs.length} 句 · 标题可直接修改
                 </p>
               </div>
 
@@ -444,7 +419,7 @@ export default function Home() {
                   <button
                     className="btn-ghost"
                     disabled={burning || task.status === "burning" || stepIndex < 5}
-                    onClick={pushEditsAndBurn}
+                    onClick={burnVideo}
                   >
                     <Clapperboard {...ic} /> 烧录双语视频
                   </button>
