@@ -6,9 +6,7 @@ import {
   Check,
   Clapperboard,
   Download,
-  FileDown,
   FileText,
-  Printer,
   RefreshCw,
   Scissors,
   Sparkles,
@@ -58,8 +56,6 @@ export default function Home() {
   const [drag, setDrag] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [burning, setBurning] = useState(false);
-  const [pdfing, setPdfing] = useState(false);
-  const [pdfErr, setPdfErr] = useState("");
   const [courseErr, setCourseErr] = useState("");
   const [courseKey, setCourseKey] = useState(0); // 归类失败时重挂载输入框，回滚显示值
   const [segs, setSegs] = useState<Segment[]>([]);
@@ -125,7 +121,7 @@ export default function Home() {
   };
 
 
-  /** 导出双语 SRT：有编辑时先同步到后端，保证导出内容与界面一致 */
+  /** 导出 SRT：有编辑时先同步到后端，保证导出内容与界面一致 */
   const syncEdits = async () => {
     if (!task) return;
     if (editedRef.current) {
@@ -144,31 +140,6 @@ export default function Home() {
     a.href = `/api/subtitle/${task.id}`;
     a.download = `subtitle-${task.title || task.id}.srt`;
     a.click();
-  };
-
-  /** 导出奶油风（纸墨手账）PDF 字幕 */
-  const downloadPdf = async () => {
-    if (!task) return;
-    setPdfing(true);
-    try {
-      await syncEdits();
-      const r = await fetch(`/api/subtitle/${task.id}?fmt=pdf`);
-      if (!r.ok) {
-        const j = await r.json().catch(() => null);
-        throw new Error(j?.error || `PDF 生成失败 (${r.status})`);
-      }
-      const blob = await r.blob();
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `subtitle-${task.title || task.id}.pdf`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-    } catch (e) {
-      setPdfErr(e instanceof Error ? e.message : String(e));
-      setTimeout(() => setPdfErr(""), 5000);
-    } finally {
-      setPdfing(false);
-    }
   };
 
   const pushEditsAndBurn = async () => {
@@ -256,11 +227,11 @@ export default function Home() {
     }).catch(() => {});
   };
 
-  const downloadNotes = (fmt: "md" | "html") => {
+  const downloadNotes = () => {
     if (!task) return;
     const a = document.createElement("a");
-    a.href = `/api/notes/${task.id}?fmt=${fmt}`;
-    a.download = `notes-${task.title || task.id}.${fmt}`;
+    a.href = `/api/notes/${task.id}`;
+    a.download = `notes-${task.title || task.id}.md`;
     a.click();
   };
 
@@ -465,17 +436,10 @@ export default function Home() {
                 <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest mb-2">导出与烧录</p>
                 <div className="flex flex-wrap gap-3">
                   <button className="btn-primary" onClick={downloadSrt}>
-                    <Download {...ic} /> 下载双语 SRT
+                    <Download {...ic} /> 下载 SRT 字幕
                   </button>
-                  <button className="btn-ghost" onClick={downloadPdf} disabled={pdfing}>
-                    <FileDown {...ic} /> {pdfing ? "PDF 生成中…" : "奶油风 PDF"}
-                  </button>
-                  {pdfErr && <p className="w-full text-xs" style={{ color: "var(--err)" }}>{pdfErr}</p>}
-                  <button className="btn-ghost" onClick={() => downloadNotes("md")}>
+                  <button className="btn-ghost" onClick={downloadNotes}>
                     <FileText {...ic} /> 复习笔记 MD
-                  </button>
-                  <button className="btn-ghost" onClick={() => downloadNotes("html")}>
-                    <Printer {...ic} /> 笔记 HTML·PDF
                   </button>
                   <button
                     className="btn-ghost"

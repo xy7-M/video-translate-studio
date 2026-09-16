@@ -536,7 +536,8 @@ export async function analyze(taskId: string) {
   const arr = (v: unknown): string[] => (Array.isArray(v) ? v.map((x) => String(x).trim()).filter(Boolean) : []);
   const summary: Summary = {
     points: arr(data.points),
-    emphasis: arr(data.emphasis),
+    emphasis: arr(data.emphasis),
+
   };
   const glossary: GlossaryItem[] = (Array.isArray(data.glossary) ? data.glossary : [])
     .map((g) => {
@@ -662,8 +663,6 @@ export function buildNotesMarkdown(taskId: string): string {
       L.push("");
     }
   }
-  L.push("## 双语转录全文");
-  for (const s of t.segments) L.push(`**[${fmtClock(s.start)}]** ${s.text}\n\n${s.zh || ""}\n`);
   return L.join("\n");
 }
 
@@ -673,74 +672,6 @@ function fmtClock(sec: number): string {
   const s = Math.floor(sec % 60);
   return h ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
 }
-
-function escHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-/** 生成纸墨手账风 HTML 复习笔记（可直接浏览器打开 / 打印成 PDF） */
-export function buildNotesHtml(taskId: string): string {
-  const t = getTask(taskId);
-  if (!t || !t.segments) throw new Error("segments missing");
-  const date = new Date(t.createdAt).toLocaleDateString("zh-CN");
-  const li = (arr: string[]) => arr.map((x) => `<li>${escHtml(x)}</li>`).join("");
-  const glossRows = (t.glossary || [])
-    .map(
-      (g) =>
-        `<div class="gcard"><p><span class="en">${escHtml(g.en)}</span><span class="zh-term">${escHtml(g.zh)}</span></p>` +
-        (g.note ? `<p class="note">${escHtml(g.note)}</p>` : "") +
-        ((g.examples?.length ?? 0) > 0
-          ? `<ul class="ex">${g.examples!.map((e) => `<li>${escHtml(e)}</li>`).join("")}</ul>`
-          : "") +
-        `</div>`
-    )
-    .join("");
-  const transcript = t.segments
-    .map((s) => `<div class="seg"><span class="ts">${fmtClock(s.start)}</span><div><p class="en">${escHtml(s.text)}</p><p class="zh">${escHtml(s.zh || "")}</p></div></div>`)
-    .join("");
-  return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${escHtml(t.title || "课堂笔记")} · 视频快译</title>
-<style>
-:root{--bg:#f5f0e8;--panel:#faf6ef;--line:#1c1911;--muted:#7a7468;--text:#1c1911;--accent:#e8634a;--note:#fbe8a6}
-*{box-sizing:border-box}
-body{background:radial-gradient(#e4dccb 1px,transparent 1.5px) 0 0/26px 26px,var(--bg);color:var(--text);font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;margin:0;padding:48px 24px;line-height:1.6}
-.wrap{max-width:820px;margin:0 auto}
-h1{font-family:"Kaiti SC","STKaiti","KaiTi",serif;font-size:32px;margin:0 0 8px}
-.meta{color:var(--muted);font-size:14px;margin-bottom:36px}
-h2{font-family:"Kaiti SC","STKaiti","KaiTi",serif;font-size:20px;margin:36px 0 14px}
-.card{background:var(--panel);border:1.5px solid var(--line);border-radius:16px;padding:22px 26px;margin-bottom:18px;box-shadow:3px 4px 0 rgba(28,25,17,.16)}
-ul{margin:0;padding-left:20px;line-height:1.8}
-.card.warn{background:var(--note)}
-table{width:100%;border-collapse:collapse;font-size:14px}
-th,td{text-align:left;padding:10px 12px;border-bottom:1.5px solid rgba(28,25,17,.18)}
-th{color:var(--muted);font-weight:500}
-td.en{color:var(--accent);font-family:ui-monospace,monospace}
-td.note{color:var(--muted)}
-.gcard{padding:14px 0;border-bottom:1.5px solid rgba(28,25,17,.12)}
-.gcard:last-child{border-bottom:none;padding-bottom:2px}
-.gcard p{margin:0}
-.gcard .en{color:var(--accent);font-family:ui-monospace,monospace;font-size:15px}
-.gcard .zh-term{margin-left:12px;font-size:15px}
-.gcard .note{color:var(--muted);font-size:13px;margin-top:4px}
-.gcard .ex{margin:8px 0 0;padding-left:20px;font-size:13px;line-height:1.7;color:var(--text)}
-.seg{display:flex;gap:14px;padding:10px 0;border-bottom:1.5px solid rgba(28,25,17,.12)}
-.ts{color:var(--muted);font-family:ui-monospace,monospace;font-size:12px;min-width:52px;padding-top:3px}
-.en{margin:0;line-height:1.6}
-.zh{margin:4px 0 0;color:var(--accent);line-height:1.6;font-size:14px}
-footer{margin-top:48px;color:var(--muted);font-size:12px;text-align:center}
-@media print{body{background:#fff}.card{box-shadow:none}}
-</style></head><body><div class="wrap">
-<h1>${escHtml(t.title || `视频 ${t.id}`)}</h1>
-<p class="meta">课程：${escHtml(t.course || "未分类")} ｜ ${date} ｜ ${t.segments.length} 句转录</p>
-${t.summary?.points?.length ? `<h2>本节课要点</h2><div class="card"><ul>${li(t.summary.points)}</ul></div>` : ""}
-${t.summary?.emphasis?.length ? `<h2>教授强调 / 疑似考点</h2><div class="card warn"><ul>${li(t.summary.emphasis)}</ul></div>` : ""}
-${glossRows ? `<h2>专业词表</h2><div class="card">${glossRows}</div>` : ""}
-<h2>双语转录全文</h2><div class="card">${transcript}</div>
-<footer>由「视频快译」自动生成 · 本地处理 · 视频不出本机</footer>
-</div></body></html>`;
-}
-
 /**
  * 中英文混合分词：英文按空格取词（≥2 字符），中文取相邻二字组合（bigram）。
  * 「作业什么时候交」→ 作业/业什/什么/么时/时候/候交，可匹配转录里的中文译文。
@@ -881,109 +812,4 @@ export async function runPipeline(taskId: string) {
   } catch (e) {
     updateTask(taskId, { status: "error", error: e instanceof Error ? e.message : String(e), message: "处理失败" });
   }
-}
-
-/* ─────────────────────────────────────────────────────────
- * 奶油风（纸墨手账）字幕 PDF 导出
- * ───────────────────────────────────────────────────────── */
-
-function esc(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-/** 双语字幕的纸墨手账风 HTML（与全站奶油风一致：点阵纸纹/墨线描边/硬边投影/贴纸倾斜） */
-export function buildSubtitleHtml(taskId: string): string {
-  const t = getTask(taskId);
-  if (!t || !t.segments) throw new Error("segments missing");
-  const date = new Date(t.createdAt).toLocaleDateString("zh-CN");
-  const rows = t.segments
-    .map(
-      (s, i) => `
-<div class="seg ${i % 2 ? "tilt-r" : "tilt-l"}">
-  <span class="no mono">${String(i + 1).padStart(2, "0")}</span>
-  <span class="ts mono">${fmtClock(s.start)} → ${fmtClock(s.end)}</span>
-  <div class="tx">
-    <p class="en">${esc(s.text)}</p>
-    <p class="zh">${esc(s.zh || "")}</p>
-  </div>
-</div>`
-    )
-    .join("");
-
-  return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
-<title>${esc(t.title || `视频 ${t.id}`)} · 双语字幕</title>
-<style>
-:root{--bg:#F5F0E8;--panel:#FAF6EF;--line:#1C1911;--muted:#7A7468;--text:#1C1911;--accent:#E8634A;--green:#6B9E7A;--note:#FBE8A6}
-@page{size:A4;margin:14mm}
-*{box-sizing:border-box}
-body{background:radial-gradient(#E4DCCB 1px,transparent 1.5px) 0 0/26px 26px,var(--bg);color:var(--text);font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;margin:0;padding:36px 28px;line-height:1.6}
-.wrap{max-width:760px;margin:0 auto}
-h1{font-family:"Kaiti SC","STKaiti","KaiTi",serif;font-size:30px;margin:0 0 6px}
-.meta{color:var(--muted);font-size:13px;margin-bottom:28px}
-.badge{display:inline-block;background:var(--note);border:1.5px solid var(--line);border-radius:999px;padding:3px 14px;font-size:12px;box-shadow:3px 4px 0 rgba(28,25,17,.16);margin-bottom:18px}
-.seg{display:flex;gap:14px;background:var(--panel);border:1.5px solid var(--line);border-radius:16px;padding:14px 18px;margin-bottom:14px;box-shadow:3px 4px 0 rgba(28,25,17,.16);break-inside:avoid}
-.seg.tilt-l{transform:rotate(-0.6deg)}
-.seg.tilt-r{transform:rotate(0.5deg)}
-.no{color:#fff;background:var(--accent);border-radius:8px;min-width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;align-self:center;border:1.5px solid var(--line)}
-.ts{color:var(--muted);font-size:11px;min-width:96px;padding-top:6px;flex-shrink:0}
-.mono{font-family:ui-monospace,Consolas,monospace}
-.en{margin:0;font-size:15px;line-height:1.55}
-.zh{margin:4px 0 0;color:var(--green);font-size:14px;font-weight:600}
-footer{margin-top:36px;color:var(--muted);font-size:12px;text-align:center}
-@media print{body{padding:0}.seg{box-shadow:2px 3px 0 rgba(28,25,17,.14)}}
-</style></head><body><div class="wrap">
-<h1>📽️ ${esc(t.title || `视频 ${t.id}`)}</h1>
-<p class="meta">课程：${esc(t.course || "未分类")} ｜ ${date} ｜ 共 ${t.segments.length} 句双语字幕</p>
-<span class="badge">✂️ 视频快译 · 中英双语字幕</span>
-${rows}
-<footer>由「视频快译」自动生成 · 纸墨手账风 · 本地处理</footer>
-</div></body></html>`;
-}
-
-function findChrome(): string | null {
-  const cands = [
-    process.env.CHROME_BIN,
-    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-    path.join(process.env.LOCALAPPDATA || "", "Google\\Chrome\\Application\\chrome.exe"),
-    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-    "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
-  ].filter(Boolean) as string[];
-  for (const c of cands) if (fs.existsSync(c)) return c;
-  return null;
-}
-
-/** 用本机 Chrome/Edge headless 把 HTML 打印成 PDF（零依赖，样式与奶油风 100% 一致） */
-export async function htmlToPdf(html: string, nameHint: string): Promise<Buffer> {
-  const chrome = findChrome();
-  if (!chrome) throw new Error("未找到 Chrome/Edge，无法生成 PDF");
-
-  const tmpHtml = path.join(WORK_DIR, `${nameHint}.pdfsrc.html`);
-  const tmpPdf = path.join(WORK_DIR, `${nameHint}.pdfout.pdf`);
-  const tmpProfile = path.join(WORK_DIR, `${nameHint}.chrome-profile`);
-  fs.writeFileSync(tmpHtml, html, "utf-8");
-  fs.rmSync(tmpPdf, { force: true });
-
-  const url = "file:///" + tmpHtml.replace(/\\/g, "/");
-  try {
-    // 独立 user-data-dir：防止已运行的 Chrome 实例接管进程而不输出文件
-    await run(chrome, [
-      "--headless=new",
-      "--disable-gpu",
-      "--no-sandbox",
-      `--user-data-dir=${tmpProfile}`,
-      `--print-to-pdf=${tmpPdf}`,
-      "--no-pdf-header-footer",
-      "--virtual-time-budget=8000",
-      url,
-    ], { timeoutMs: 60 * 1000 });
-  } finally {
-    fs.rmSync(tmpHtml, { force: true });
-    fs.rmSync(tmpProfile, { recursive: true, force: true });
-  }
-
-  if (!fs.existsSync(tmpPdf)) throw new Error("PDF 生成失败（Chrome 未输出文件）");
-  const buf = fs.readFileSync(tmpPdf);
-  fs.rmSync(tmpPdf, { force: true });
-  return buf;
 }
