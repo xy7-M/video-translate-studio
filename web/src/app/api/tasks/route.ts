@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { findCourseVariant, listTasks, updateTask } from "@/lib/pipeline";
+import { findCourseVariant, findTitleTaken, listTasks, updateTask } from "@/lib/pipeline";
 
 export const runtime = "nodejs";
 
@@ -38,7 +38,15 @@ export async function POST(req: Request) {
     }
     patch.course = course || undefined;
   }
-  if (typeof body.title === "string") patch.title = body.title.trim() || undefined;
+  if (typeof body.title === "string") {
+    const title = body.title.trim();
+    // 视频标题不可完全相同：与其他任务的标题重复（忽略大小写/首尾空格）时拒绝
+    const taken = findTitleTaken(title, body.id);
+    if (taken) {
+      return NextResponse.json({ error: `已有视频叫「${taken}」，请换一个名字` }, { status: 409 });
+    }
+    patch.title = title || undefined;
+  }
   if (!Object.keys(patch).length) return NextResponse.json({ error: "缺少修改内容" }, { status: 400 });
 
   const t = updateTask(body.id, patch);

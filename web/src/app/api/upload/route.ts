@@ -3,7 +3,7 @@ import path from "path";
 import { Readable } from "stream";
 import { pipeline as streamPipeline } from "stream/promises";
 import { NextResponse } from "next/server";
-import { UPLOAD_DIR, newTask, updateTask, runPipeline, probeDuration, MAX_DURATION_SEC } from "@/lib/pipeline";
+import { UPLOAD_DIR, newTask, updateTask, runPipeline, probeDuration, MAX_DURATION_SEC, uniqueTitle } from "@/lib/pipeline";
 import { captureToken } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "文件超过 2GB（约等于 2 小时 720p）" }, { status: 400 });
   }
 
-  const task = newTask("", path.basename(file.name, ext));
+  const task = newTask("", uniqueTitle(path.basename(file.name, ext)));
   const dest = path.join(UPLOAD_DIR, `${task.id}${ext}`);
 
   // 流式写盘：大文件不占内存

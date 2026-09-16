@@ -2,11 +2,36 @@
 
 /**
  * Supabase 客户端：邮箱登录。
- * 会话 token 不存 localStorage —— 桌面版经 IPC 写入本机 vtdata/auth.json，
- * 纯浏览器开发态降级为内存存储（刷新需重新登录）。
+ * 桌面版会话 token 经 IPC 写入本机 vtdata/auth.json（不碰 localStorage）；
+ * 浏览器（开发/网页版）无文件系统能力，降级为 localStorage 持久化以实现「下次打开自动登录」。
  */
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+const browserStorage = {
+  getItem: (k: string) => {
+    try {
+      return localStorage.getItem(k);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (k: string, v: string) => {
+    try {
+      localStorage.setItem(k, v);
+    } catch {
+      /* 隐私模式等场景静默降级为内存态 */
+    }
+  },
+  removeItem: (k: string) => {
+    try {
+      localStorage.removeItem(k);
+    } catch {
+      /* ignore */
+    }
+  },
+};
+
+// 内存镜像：供无 bridge 环境下 supabase-js 读写（实际落盘走 browserStorage）
 const memoryStore = new Map<string, string>();
 
 const memStorage = {
@@ -32,7 +57,7 @@ export async function getSupabase(): Promise<SupabaseClient | null> {
 
   if (!bridge) {
     client = createClient(url, anon, {
-      auth: { storage: memStorage, persistSession: true, detectSessionInUrl: false, flowType: "implicit" },
+      auth: { storage: browserStorage, persistSession: true, detectSessionInUrl: false, flowType: "implicit" },
     });
     return client;
   }

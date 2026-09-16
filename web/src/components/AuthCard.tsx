@@ -124,7 +124,7 @@ export default function AuthCard({
       }
       setEmail(e);
       setStep(2);
-      setNotice(`验证码已发送至 ${e}（含垃圾箱），6 位数字，10 分钟内有效。`);
+      setNotice(`验证码已发送至 ${e}（含垃圾箱），6 位数字，1 分钟内有效。`);
       setCooldown(60);
     } catch (raw) {
       setErr(mapAuthError(raw instanceof Error ? raw.message : String(raw)));

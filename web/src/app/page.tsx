@@ -8,11 +8,10 @@ import {
   Download,
   FileDown,
   FileText,
-  ListChecks,
   Printer,
   RefreshCw,
+  Scissors,
   Sparkles,
-  Square,
   Upload,
   Zap,
 } from "lucide-react";
@@ -25,7 +24,8 @@ import { useAuth } from "@/lib/auth-context";
 const ic = { size: 15, strokeWidth: 1.75, className: "shrink-0" } as const;
 
 type Segment = { start: number; end: number; text: string; zh?: string };
-type Summary = { points: string[]; emphasis: string[]; actions: string[] };
+type Summary = { points: string[]; emphasis: string[] };
+type TimelineSeg = { start: number; end: number; title: string; summary: string };
 type GlossaryItem = { en: string; zh: string; note?: string; examples?: string[] };
 type Task = {
   id: string;
@@ -40,6 +40,7 @@ type Task = {
   course?: string;
   summary?: Summary;
   glossary?: GlossaryItem[];
+  timeline?: TimelineSeg[];
 };
 
 const STEPS = ["上传", "抽取音轨", "英文转写", "中文翻译", "AI 课堂笔记", "双语字幕"];
@@ -63,6 +64,7 @@ export default function Home() {
   const [courseKey, setCourseKey] = useState(0); // 归类失败时重挂载输入框，回滚显示值
   const [segs, setSegs] = useState<Segment[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval>>();
   const editedRef = useRef(false); // 用户手动改过字幕后，停止用后端数据覆盖前端
 
@@ -122,10 +124,6 @@ export default function Home() {
     }
   };
 
-  const editSeg = (i: number, field: "text" | "zh", v: string) => {
-    editedRef.current = true; // 用户开始编辑，冻结后端覆盖
-    setSegs((prev) => prev.map((s, n) => (n === i ? { ...s, [field]: v } : s)));
-  };
 
   /** 导出双语 SRT：有编辑时先同步到后端，保证导出内容与界面一致 */
   const syncEdits = async () => {
@@ -419,6 +417,7 @@ export default function Home() {
             <div className="panel overflow-hidden self-start">
               <video
                 key={task.status === "done" ? "burned" : "src"}
+                ref={videoRef}
                 controls
                 className="w-full max-h-[520px] bg-black"
                 src={`/api/video/${task.id}/${task.status === "done" ? "burned" : "src"}`}
@@ -443,7 +442,7 @@ export default function Home() {
                 <p className="text-sm text-[var(--muted)] mt-1 inline-flex items-center gap-1.5">
                   双语字幕已生成
                   <Check size={14} strokeWidth={2.5} className="text-[var(--ok)]" />
-                  · 共 {segs.length} 句 · 名称与文字均可编辑，导出时以编辑内容为准
+                  · 共 {segs.length} 句 · 名称可编辑，导出时以编辑内容为准
                 </p>
               </div>
 
@@ -522,10 +521,40 @@ export default function Home() {
             </div>
           </div>
 
+          {/* 视频剖析：按主题切分的时间线，点击跳转到对应片段 */}
+          {(task.timeline?.length ?? 0) > 0 && (
+            <div className="panel p-6">
+              <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest mb-4 inline-flex items-center gap-1.5">
+                <Scissors size={13} strokeWidth={1.75} /> 视频剖析 · {task.timeline!.length} 个片段，点击快速回看
+              </p>
+              <div className="grid md:grid-cols-2 gap-3">
+                {task.timeline!.map((tl, i) => (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      const v = videoRef.current;
+                      if (!v) return;
+                      v.currentTime = tl.start;
+                      v.play().catch(() => {});
+                      v.scrollIntoView({ behavior: "smooth", block: "center" });
+                    }}
+                    className="text-left border border-[var(--line)] rounded-2xl px-4 py-3 hover:border-[var(--accent)] hover:-translate-y-[1px] transition-all duration-150 bg-[var(--bg-2)]"
+                    style={{ transform: `rotate(${i % 2 ? 0.4 : -0.4}deg)` }}
+                  >
+                    <p className="text-xs mono text-[var(--accent)] mb-1">
+                      {fmt(tl.start)} → {fmt(tl.end)}
+                    </p>
+                    <p className="text-sm font-medium">{tl.title}</p>
+                    {tl.summary && <p className="text-xs text-[var(--muted)] mt-1 leading-relaxed">{tl.summary}</p>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {/* AI 课堂笔记 + 专业词表 */}
           {(task.summary || task.glossary) && (
             <div className="grid md:grid-cols-2 gap-6">
-              {task.summary && (task.summary.points.length || task.summary.emphasis.length || task.summary.actions.length) > 0 && (
+              {task.summary && (task.summary.points.length || task.summary.emphasis.length) > 0 && (
                 <div className="panel p-6 space-y-5">
                   <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest inline-flex items-center gap-1.5">
                     <Sparkles size={13} strokeWidth={1.75} /> AI 课堂摘要
@@ -545,21 +574,6 @@ export default function Home() {
                       </p>
                       <ul className="space-y-1.5 text-sm text-[var(--muted)] list-disc pl-5 marker:text-[var(--warn)]">
                         {task.summary.emphasis.map((p, i) => <li key={i}>{p}</li>)}
-                      </ul>
-                    </div>
-                  )}
-                  {task.summary.actions.length > 0 && (
-                    <div>
-                      <p className="text-sm font-medium mb-2 inline-flex items-center gap-1.5" style={{ color: "var(--ok)" }}>
-                        <ListChecks size={14} strokeWidth={1.75} /> 待办事项
-                      </p>
-                      <ul className="space-y-1.5 text-sm text-[var(--muted)]">
-                        {task.summary.actions.map((p, i) => (
-                          <li key={i} className="flex gap-2 items-start">
-                            <Square size={14} strokeWidth={1.75} className="mt-1 shrink-0" style={{ color: "var(--ok)" }} />
-                            <span>{p}</span>
-                          </li>
-                        ))}
                       </ul>
                     </div>
                   )}
@@ -595,34 +609,6 @@ export default function Home() {
               )}
             </div>
           )}
-
-          {/* Bilingual table */}
-          <div className="panel overflow-hidden">
-            <div className="grid grid-cols-[70px_1fr_1fr] bg-[var(--bg-2)] text-xs mono text-[var(--muted)] uppercase">
-              <div className="p-3">时间</div>
-              <div className="p-3 border-l border-[var(--hair)]">English</div>
-              <div className="p-3 border-l border-[var(--hair)]">中文</div>
-            </div>
-            <div className="max-h-[420px] overflow-y-auto divide-y divide-[var(--hair)]">
-              {segs.map((s, i) => (
-                <div key={i} className="grid grid-cols-[70px_1fr_1fr] items-start hover:bg-[rgba(232,99,74,0.05)]">
-                  <div className="p-3 mono text-xs text-[var(--muted)]">{fmt(s.start)}</div>
-                  <textarea
-                    className="bg-transparent p-3 text-sm resize-none outline-none border-l border-[var(--hair)] focus:bg-[var(--bg-2)] min-h-[44px]"
-                    rows={2}
-                    value={s.text}
-                    onChange={(e) => editSeg(i, "text", e.target.value)}
-                  />
-                  <textarea
-                    className="bg-transparent p-3 text-sm resize-none outline-none border-l border-[var(--hair)] focus:bg-[var(--bg-2)] min-h-[44px]"
-                    rows={2}
-                    value={s.zh || ""}
-                    onChange={(e) => editSeg(i, "zh", e.target.value)}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       )}
       </>

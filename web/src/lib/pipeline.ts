@@ -16,7 +16,6 @@ export type Segment = {
 export type Summary = {
   points: string[]; // 本节课核心要点
   emphasis: string[]; // 教授反复强调 / 疑似考点
-  actions: string[]; // 作业、deadline、待办
 };
 
 /** 视频剖析：把整条视频按主题切成若干时间段，供快速回看跳转 */
@@ -525,10 +524,9 @@ export async function analyze(taskId: string) {
   const data = await deepseekJson(
     "你是中外合作办学学生的课堂笔记助手。阅读英文课堂逐字稿，输出结构化中文笔记、术语表与视频剖析。" +
       "只输出 JSON：{\"points\":[\"核心要点\"],\"emphasis\":[\"教授反复强调或疑似考点\"]," +
-      "\"actions\":[\"作业/deadline/待办，没有则空数组\"]," +
       "\"glossary\":[{\"en\":\"英文术语\",\"zh\":\"中文释义\",\"note\":\"简明扼要的诠释说明\",\"examples\":[\"含该术语的简单英文例句1\",\"例句2\",\"例句3\"]}]," +
       "\"timeline\":[{\"from\":起始行号,\"to\":结束行号,\"title\":\"该段主题（≤12字）\",\"summary\":\"这段讲了什么（≤40字）\"}]}" +
-      "。points/emphasis 各 3-6 条，actions 0-5 条，glossary 挑 6-12 个学术/专业术语。" +
+      "。points/emphasis 各 3-6 条，glossary 挑 6-12 个学术/专业术语。" +
       "glossary 每个术语必须配 3 个结构简单、语义清晰的英文例句（≤15 词，帮助学习者理解、记忆和应用该词）。" +
       "timeline 把整条转录按主题变化切成若干段（≥1 段），段与段首尾相接覆盖全部行号，from/to 必须取自输入的行号。",
     JSON.stringify({ transcript, segments: segLines }),
@@ -538,8 +536,7 @@ export async function analyze(taskId: string) {
   const arr = (v: unknown): string[] => (Array.isArray(v) ? v.map((x) => String(x).trim()).filter(Boolean) : []);
   const summary: Summary = {
     points: arr(data.points),
-    emphasis: arr(data.emphasis),
-    actions: arr(data.actions),
+    emphasis: arr(data.emphasis),
   };
   const glossary: GlossaryItem[] = (Array.isArray(data.glossary) ? data.glossary : [])
     .map((g) => {
@@ -645,18 +642,13 @@ export function buildNotesMarkdown(taskId: string): string {
   L.push(`# ${t.title || `视频 ${t.id}`} · 课堂笔记`);
   L.push(`> 课程：${t.course || "未分类"} ｜ 日期：${date} ｜ 共 ${t.segments.length} 句`);
   L.push("");
-  if (t.summary && (t.summary.points.length || t.summary.emphasis.length || t.summary.actions.length)) {
+  if (t.summary && (t.summary.points.length || t.summary.emphasis.length)) {
     L.push("## 本节课要点");
     for (const p of t.summary.points) L.push(`- ${p}`);
     L.push("");
     if (t.summary.emphasis.length) {
       L.push("## ⚠️ 教授强调 / 疑似考点");
       for (const p of t.summary.emphasis) L.push(`- ${p}`);
-      L.push("");
-    }
-    if (t.summary.actions.length) {
-      L.push("## ✅ 待办事项");
-      for (const p of t.summary.actions) L.push(`- [ ] ${p}`);
       L.push("");
     }
   }
@@ -743,7 +735,6 @@ footer{margin-top:48px;color:var(--muted);font-size:12px;text-align:center}
 <p class="meta">课程：${escHtml(t.course || "未分类")} ｜ ${date} ｜ ${t.segments.length} 句转录</p>
 ${t.summary?.points?.length ? `<h2>本节课要点</h2><div class="card"><ul>${li(t.summary.points)}</ul></div>` : ""}
 ${t.summary?.emphasis?.length ? `<h2>教授强调 / 疑似考点</h2><div class="card warn"><ul>${li(t.summary.emphasis)}</ul></div>` : ""}
-${t.summary?.actions?.length ? `<h2>待办事项</h2><div class="card"><ul>${li(t.summary.actions)}</ul></div>` : ""}
 ${glossRows ? `<h2>专业词表</h2><div class="card">${glossRows}</div>` : ""}
 <h2>双语转录全文</h2><div class="card">${transcript}</div>
 <footer>由「视频快译」自动生成 · 本地处理 · 视频不出本机</footer>
@@ -790,7 +781,6 @@ function noteBlocks(t: Task): { label: string; text: string }[] {
   for (const [label, items] of [
     ["本节课要点", t.summary?.points || []],
     ["教授强调 / 疑似考点", t.summary?.emphasis || []],
-    ["待办事项", t.summary?.actions || []],
   ] as const) {
     for (const item of items) blocks.push({ label, text: item });
   }

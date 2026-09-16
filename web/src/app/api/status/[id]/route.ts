@@ -21,5 +21,6 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     course: t.course,
     summary: t.summary,
     glossary: t.glossary,
+    timeline: t.timeline,
   });
 }

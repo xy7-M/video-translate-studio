@@ -213,11 +213,20 @@ export default function Library({
     setEditingId("");
     const next = editTitle.trim();
     if (!next || next === (tasks.find((t) => t.id === id)?.title ?? `视频 ${id}`)) return;
-    await fetch("/api/tasks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, title: next }),
-    }).catch(() => {});
+    try {
+      const r = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, title: next }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setCourseErr(j.error || "重命名失败"); // 顶部红条提示；输入框未更新，显示值自动回滚
+        return;
+      }
+    } catch {
+      return;
+    }
     setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, title: next } : t)));
     setHits((hs) => hs.map((h) => (h.taskId === id ? { ...h, title: next } : h)));
   };
