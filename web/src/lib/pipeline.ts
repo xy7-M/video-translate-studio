@@ -365,7 +365,7 @@ export async function transcribe(taskId: string) {
  */
 export function resegmentSegments(segs: Segment[]): Segment[] {
   const MIN_CHARS = 10; // 短于此不断句（避免 "OK." 独占一行）
-  const MAX_CHARS = 46; // 硬上限：无标点也要换气
+  const MAX_CHARS = 42; // 电影字幕单行上限：无标点也要换气
   // 以这些词结尾的行语义未完，停顿再大也不断行（防止 "using physical / properties" 式腰斩）
   const DANGLE = new Set([
     "the", "a", "an", "of", "and", "or", "but", "to", "in", "on", "at", "for", "with", "by", "as",
@@ -415,11 +415,11 @@ export function resegmentSegments(segs: Segment[]): Segment[] {
     flush();
   }
 
-  // 碎片并入上一行，避免一闪而过的半句；但合并后不得超过 54 字符
+  // 碎片并入上一行，避免一闪而过的半句；但合并后不得超过单行上限
   const out: Segment[] = [];
   for (const s of raw) {
     const prev = out[out.length - 1];
-    if (prev && (s.text.length < 18 || s.end - s.start < 0.6) && prev.text.length + s.text.length <= 54) {
+    if (prev && (s.text.length < 18 || s.end - s.start < 0.6) && prev.text.length + s.text.length <= MAX_CHARS) {
       prev.text = `${prev.text} ${s.text}`;
       prev.end = Math.max(prev.end, s.end);
     } else {
@@ -591,6 +591,67 @@ export function writeSrt(taskId: string): string {
   return file;
 }
 
+/** ASS 时间戳：H:MM:SS.cc（厘秒），电影字幕标准精度 */
+function fmtAssTime(sec: number): string {
+  const s = Math.max(0, sec);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = Math.floor(s % 60);
+  const cs = Math.round((s - Math.floor(s)) * 100);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${h}:${pad(m)}:${pad(ss)}.${pad(cs)}`;
+}
+
+/** 转义花括号，防止字幕文本被 libass 当作 \override 标签解析 */
+function escAss(s: string): string {
+  return s.replace(/\{/g, "\\{").replace(/\}/g, "\\}");
+}
+
+/**
+ * 生成电影级双语字幕 ASS（1920×1080 基准，libass 按视频分辨率等比缩放）。
+ * 排版规范：底部居中对齐、纯描边无投影、左右安全边距、
+ * 英文 Arial / 中文微软雅黑分样式渲染，中文行以 {\rSubZh} 内联切换。
+ */
+export function buildAss(segs: Segment[]): string {
+  const header =
+    "[Script Info]\n" +
+    "ScriptType: v4.00+\n" +
+    "PlayResX: 1920\n" +
+    "PlayResY: 1080\n" +
+    "WrapStyle: 0\n" +
+    "ScaledBorderAndShadow: yes\n" +
+    "YCbCr Matrix: TV.709\n" +
+    "\n" +
+    "[V4+ Styles]\n" +
+    "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n" +
+    "Style: SubEn,Arial,54,&H00FFFFFF,&H00000000,&H00000000,&H00000000,-1,0,0,100,100,0.4,0,1,3.2,0,2,180,180,54,1\n" +
+    "Style: SubZh,Microsoft YaHei,50,&H00FFFFFF,&H00000000,&H00000000,&H00000000,-1,0,0,100,100,1.2,0,1,3,0,2,180,180,54,1\n" +
+    "\n" +
+    "[Events]\n" +
+    "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n";
+
+  const events = segs
+    .filter((s) => s.text.trim())
+    .map((s) => {
+      const en = escAss(s.text.trim());
+      const zh = (s.zh || "").trim();
+      const text = zh ? `${en}{\\rSubZh}\\N${escAss(zh)}` : en;
+      return `Dialogue: 0,${fmtAssTime(s.start)},${fmtAssTime(s.end)},SubEn,,0,0,0,,${text}`;
+    })
+    .join("\n");
+
+  return header + events + "\n";
+}
+
+/** 落盘 ASS 字幕（烧录用），返回文件路径 */
+export function writeAss(taskId: string): string {
+  const t = getTask(taskId);
+  if (!t || !t.segments) throw new Error("segments missing");
+  const file = path.join(WORK_DIR, `${t.id}.ass`);
+  fs.writeFileSync(file, buildAss(t.segments), "utf-8");
+  return file;
+}
+
 /** 阶段四：烧录双语字幕（优先 NVENC 显卡编码，失败回退 libx264） */
 export async function burnSubtitles(taskId: string) {
   const t = getTask(taskId);
@@ -599,15 +660,12 @@ export async function burnSubtitles(taskId: string) {
   updateTask(taskId, { status: "burning", progress: 95, message: "正在烧录字幕视频（GPU 加速）…" });
 
   const out = path.join(OUT_DIR, `${t.id}.subtitled.mp4`);
-  const srt = t.srtFile || writeSrt(taskId);
+  const ass = writeAss(taskId);
   // Windows + ffmpeg9：必须 filename='...' 显式命名，正斜杠路径 + 转义盘符冒号（C\:/），
   // 否则 "C:" 会被当作 original_size 选项解析失败
-  const fwd = srt.replace(/\\/g, "/");
+  const fwd = ass.replace(/\\/g, "/");
   const escaped = `${fwd.slice(0, 1)}\\:${fwd.slice(2)}`.replace(/'/g, "\\'");
-  const assStyle =
-    "FontName=Microsoft YaHei,FontSize=13,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000," +
-    "BorderStyle=1,Outline=1.5,Shadow=0.5,Alignment=2,MarginV=60";
-  const vf = `subtitles=filename='${escaped}':force_style='${assStyle}'`;
+  const vf = `ass=filename='${escaped}'`;
 
   const nvencArgs = [
     "-y", "-i", t.videoFile, "-vf", vf,

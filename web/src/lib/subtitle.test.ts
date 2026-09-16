@@ -7,7 +7,7 @@ vi.mock("./deepseek", () => ({
   deepseekText: vi.fn(),
 }));
 
-import { punctuate, resegmentSegments, type Segment } from "./pipeline";
+import { punctuate, resegmentSegments, buildAss, type Segment } from "./pipeline";
 
 /** 便捷构造：按给定词序列生成 whisper 词级时间戳（默认词长 0.4s、间隔 0.1s） */
 function makeWords(
@@ -88,13 +88,11 @@ describe("resegmentSegments 断句", () => {
     expect(out[1].text).toBe("is very important indeed.");
   });
 
-  it("无标点时也按 MAX_CHARS(46) 硬上限强制换气", () => {
+  it("无标点时也按 MAX_CHARS(42) 硬上限强制换气", () => {
     const words = makeWords(Array.from({ length: 10 }, () => "aaaaaaaaaa")); // 每词 10 字符
     const out = resegmentSegments([seg(0, 9, "", words)]);
-    // 每满 ~46 字符（5 词 × 11）切一刀 → 两组各 5 词
-    expect(out).toHaveLength(2);
-    expect(out[0].text.split(" ")).toHaveLength(5);
-    expect(out[1].text.split(" ")).toHaveLength(5);
+    // 每满 ~42 字符（4 词 × 11 = 44）切一刀 → 4 + 4 + 2
+    expect(out.map((s) => s.text.split(" ").length)).toEqual([4, 4, 2]);
   });
 
   it("标点归一：'foo .' → 'foo.'，标点后补空格", () => {
@@ -115,7 +113,7 @@ describe("resegmentSegments 断句", () => {
     expect(out[0].end).toBe(w2[0].e);
   });
 
-  it("合并有上限：拼接后超过 54 字符的碎片保持独立行", () => {
+  it("合并有上限：拼接后超过 42 字符的碎片保持独立行", () => {
     const w1 = makeWords(["one", "two", "three."], { gap: 0.1 }); // 14 字符
     const w2 = makeWords(["a".repeat(45) + "."], { start: 3, wordDur: 1 }); // 46 字符，≥18 且 ≥0.6s
     const out = resegmentSegments([seg(0, 5, "", [...w1, ...w2])]);
@@ -148,6 +146,49 @@ describe("resegmentSegments 断句", () => {
     expect(out[0].text).toBe("this is the first.");
     expect(out[1].text).toBe("and this is second.");
     for (let i = 1; i < out.length; i++) expect(out[i].start).toBeGreaterThanOrEqual(out[i - 1].start);
+  });
+});
+
+describe("buildAss 电影级字幕排版", () => {
+  it("输出 1080p 基准、居中、无投影的样式头", () => {
+    const ass = buildAss([seg(0, 2, "hello world.", undefined)]);
+    expect(ass).toContain("PlayResX: 1920");
+    expect(ass).toContain("PlayResY: 1080");
+    expect(ass).toContain("ScaledBorderAndShadow: yes");
+    // Shadow=0 纯描边无投影；Alignment=2 底部居中
+    const enStyle = ass.split("\n").find((l) => l.startsWith("Style: SubEn,"))!;
+    const fields = enStyle.split(",");
+    expect(fields[16]).toBe("0"); // Shadow
+    expect(fields[17]).toBe("2"); // Alignment
+  });
+
+  it("时间戳为 H:MM:SS.cc 厘秒格式", () => {
+    const ass = buildAss([seg(61.5, 63.25, "one.", undefined)]);
+    expect(ass).toContain("0:01:01.50,0:01:03.25");
+  });
+
+  it("双语行：英文走 SubEn，中文用 \\rSubZh 内联换样式", () => {
+    const ass = buildAss([{ start: 0, end: 2, text: "good morning", zh: "早上好" }]);
+    const line = ass.split("\n").find((l) => l.startsWith("Dialogue:"))!;
+    expect(line).toContain("good morning{\\rSubZh}\\N早上好");
+    expect(line).toContain(",SubEn,,0,0,0,,");
+  });
+
+  it("仅英文时不插入换行与样式切换", () => {
+    const ass = buildAss([{ start: 0, end: 2, text: "english only", zh: "  " }]);
+    const line = ass.split("\n").find((l) => l.startsWith("Dialogue:"))!;
+    expect(line.endsWith("english only")).toBe(true);
+    expect(line).not.toContain("\\N");
+  });
+
+  it("花括号被转义，避免被当作 \\override 解析", () => {
+    const ass = buildAss([{ start: 0, end: 2, text: "set {x} = 1", zh: "" }]);
+    expect(ass).toContain("set \\{x\\} = 1");
+  });
+
+  it("空文本段被丢弃", () => {
+    const ass = buildAss([seg(0, 1, "   "), seg(2, 3, "keep.", undefined)]);
+    expect((ass.match(/^Dialogue:/gm) || [])).toHaveLength(1);
   });
 });
 
