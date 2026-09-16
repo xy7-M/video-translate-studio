@@ -18,7 +18,6 @@ import {
 } from "lucide-react";
 import Library from "@/components/Library";
 import SettingsModal from "@/components/SettingsModal";
-import TranslateModal from "@/components/TranslateModal";
 import { authedFetch } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
 
@@ -27,7 +26,7 @@ const ic = { size: 15, strokeWidth: 1.75, className: "shrink-0" } as const;
 
 type Segment = { start: number; end: number; text: string; zh?: string };
 type Summary = { points: string[]; emphasis: string[]; actions: string[] };
-type GlossaryItem = { en: string; zh: string; note?: string };
+type GlossaryItem = { en: string; zh: string; note?: string; examples?: string[] };
 type Task = {
   id: string;
   status: string;
@@ -296,7 +295,6 @@ export default function Home() {
           >
             课程库
           </button>
-          <TranslateModal />
           {session ? (
             <button
               onClick={() => signOut()}
@@ -580,6 +578,16 @@ export default function Home() {
                           <span className="text-[var(--text)] ml-3">{g.zh}</span>
                         </p>
                         {g.note && <p className="text-xs text-[var(--muted)]">{g.note}</p>}
+                        {(g.examples?.length ?? 0) > 0 && (
+                          <ul className="mt-1.5 space-y-1">
+                            {g.examples!.map((e, j) => (
+                              <li key={j} className="text-xs text-[var(--text)] leading-relaxed flex gap-1.5">
+                                <span className="mono text-[var(--muted)] shrink-0">{j + 1}.</span>
+                                <span>{e}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
                       </div>
                     ))}
                   </div>

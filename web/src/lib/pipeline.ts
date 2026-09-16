@@ -19,8 +19,11 @@ export type Summary = {
   actions: string[]; // 作业、deadline、待办
 };
 
-/** 专业词表条目（中英对照 + 释义） */
-export type GlossaryItem = { en: string; zh: string; note?: string };
+/** 视频剖析：把整条视频按主题切成若干时间段，供快速回看跳转 */
+export type TimelineSeg = { start: number; end: number; title: string; summary: string };
+
+/** 专业词表条目（中英对照 + 释义 + 3 个例句） */
+export type GlossaryItem = { en: string; zh: string; note?: string; examples?: string[] };
 
 export type TaskStatus =
   | "queued"
@@ -50,8 +53,9 @@ export type Task = {
   title?: string; // 视频文件名（去扩展名）
   course?: string; // 所属课程频道（Channels）
   duration?: number; // 视频时长（秒）
-  summary?: Summary; // AI 课堂摘要 + 行动项
+  summary?: Summary; // AI 课堂摘要
   glossary?: GlossaryItem[]; // 专业词表
+  timeline?: TimelineSeg[]; // 视频剖析：按主题切分的时间线段
 };
 
 // 开发态：web/ 的上级项目根；桌面版：由 Electron 通过 VIDEOTRANS_ROOT 指定 resources 目录
@@ -232,6 +236,30 @@ export function findCourseVariant(newCourse: string, exceptTaskId?: string): str
     if (norm(t.course) === norm(target)) variant = t.course.trim();
   }
   return variant;
+}
+
+/** 视频标题查重：trim 后与其他任务完全相同（忽略大小写）→ 返回冲突标题 */
+export function findTitleTaken(newTitle: string, exceptTaskId?: string): string | null {
+  const norm = (s: string) => s.trim().toLowerCase();
+  const target = newTitle.trim();
+  if (!target) return null;
+  for (const t of listTasks()) {
+    if (t.id === exceptTaskId) continue;
+    const title = (t.title || "").trim();
+    if (title && norm(title) === norm(target)) return title;
+  }
+  return null;
+}
+
+/** 导入时生成不冲突的默认标题：重名则追加 " (2)"、" (3)"… */
+export function uniqueTitle(base: string): string {
+  const clean = base.trim() || "未命名视频";
+  if (!findTitleTaken(clean)) return clean;
+  for (let n = 2; n < 1000; n++) {
+    const cand = `${clean} (${n})`;
+    if (!findTitleTaken(cand)) return cand;
+  }
+  return `${clean} (${Date.now()})`;
 }
 
 function run(
@@ -474,13 +502,13 @@ export async function translate(taskId: string) {
 }
 
 /**
- * 阶段四：AI 课堂摘要 + 专业词表（借鉴 Otter 的 AI 摘要/行动项、Notta 的可视化笔记）
- * 一次调用同时产出要点、教授强调项、待办与中英术语表。
+ * 阶段四：AI 课堂摘要 + 专业词表 + 视频剖析（时间线分段）
+ * 一次调用产出：要点、教授强调、中英术语表，以及按主题切分的时间线段。
  */
 export async function analyze(taskId: string) {
   const t = getTask(taskId);
   if (!t || !t.segments) throw new Error("segments missing");
-  updateTask(taskId, { status: "analyzing", progress: 88, message: "AI 生成课堂笔记与词表…" });
+  updateTask(taskId, { status: "analyzing", progress: 88, message: "AI 生成课堂笔记、词表与视频剖析…" });
 
   // 全英文课堂 transcript 可能很长，截断到 ~12000 字符避免超上下文
   const transcript = t.segments
@@ -488,13 +516,22 @@ export async function analyze(taskId: string) {
     .join(" ")
     .slice(0, 12000);
 
+  // 带序号与时间戳的转录，供模型按行号切分时间段
+  const segLines = t.segments
+    .map((s, i) => `${i}|${Math.floor(s.start / 60)}:${String(Math.floor(s.start % 60)).padStart(2, "0")}|${s.text}`)
+    .join("\n")
+    .slice(0, 12000);
+
   const data = await deepseekJson(
-    "你是中外合作办学学生的课堂笔记助手。阅读英文课堂逐字稿，输出结构化中文笔记与术语表。" +
+    "你是中外合作办学学生的课堂笔记助手。阅读英文课堂逐字稿，输出结构化中文笔记、术语表与视频剖析。" +
       "只输出 JSON：{\"points\":[\"核心要点\"],\"emphasis\":[\"教授反复强调或疑似考点\"]," +
       "\"actions\":[\"作业/deadline/待办，没有则空数组\"]," +
-      "\"glossary\":[{\"en\":\"英文术语\",\"zh\":\"中文释义\",\"note\":\"简短说明\"}]}" +
-      "。points/emphasis 各 3-6 条，actions 0-5 条，glossary 挑 6-12 个学术/专业术语。",
-    JSON.stringify({ transcript }),
+      "\"glossary\":[{\"en\":\"英文术语\",\"zh\":\"中文释义\",\"note\":\"简明扼要的诠释说明\",\"examples\":[\"含该术语的简单英文例句1\",\"例句2\",\"例句3\"]}]," +
+      "\"timeline\":[{\"from\":起始行号,\"to\":结束行号,\"title\":\"该段主题（≤12字）\",\"summary\":\"这段讲了什么（≤40字）\"}]}" +
+      "。points/emphasis 各 3-6 条，actions 0-5 条，glossary 挑 6-12 个学术/专业术语。" +
+      "glossary 每个术语必须配 3 个结构简单、语义清晰的英文例句（≤15 词，帮助学习者理解、记忆和应用该词）。" +
+      "timeline 把整条转录按主题变化切成若干段（≥1 段），段与段首尾相接覆盖全部行号，from/to 必须取自输入的行号。",
+    JSON.stringify({ transcript, segments: segLines }),
     0.2
   );
 
@@ -507,11 +544,30 @@ export async function analyze(taskId: string) {
   const glossary: GlossaryItem[] = (Array.isArray(data.glossary) ? data.glossary : [])
     .map((g) => {
       const o = (g || {}) as Record<string, unknown>;
-      return { en: String(o.en || "").trim(), zh: String(o.zh || "").trim(), note: String(o.note || "").trim() };
+      const ex = Array.isArray(o.examples) ? o.examples.map((x) => String(x).trim()).filter(Boolean).slice(0, 3) : [];
+      return { en: String(o.en || "").trim(), zh: String(o.zh || "").trim(), note: String(o.note || "").trim(), examples: ex };
     })
     .filter((g) => g.en && g.zh);
 
-  updateTask(taskId, { summary, glossary, status: "ready", progress: 92, message: "双语字幕与课堂笔记已生成" });
+  // 视频剖析：行号 → 时间戳；越界/倒挂的段丢弃，title 为空的段丢弃
+  const segs = t.segments;
+  const timeline: TimelineSeg[] = (Array.isArray(data.timeline) ? data.timeline : [])
+    .map((x) => {
+      const o = (x || {}) as Record<string, unknown>;
+      const from = Math.max(0, Math.min(segs.length - 1, Math.trunc(Number(o.from ?? 0))));
+      const rawTo = Number.isFinite(Number(o.to)) ? Math.trunc(Number(o.to)) : from;
+      const to = Math.max(from, Math.min(segs.length - 1, rawTo));
+      return {
+        start: segs[from]?.start ?? 0,
+        end: segs[to]?.end ?? 0,
+        title: String(o.title || "").trim(),
+        summary: String(o.summary || "").trim(),
+      };
+    })
+    .filter((s) => s.title)
+    .sort((a, b) => a.start - b.start);
+
+  updateTask(taskId, { summary, glossary, timeline, status: "ready", progress: 92, message: "双语字幕与课堂笔记已生成" });
 }
 
 /** SRT 工具 */
@@ -606,10 +662,13 @@ export function buildNotesMarkdown(taskId: string): string {
   }
   if (t.glossary?.length) {
     L.push("## 📖 专业词表");
-    L.push("| 英文术语 | 中文释义 | 说明 |");
-    L.push("| --- | --- | --- |");
-    for (const g of t.glossary) L.push(`| ${g.en} | ${g.zh} | ${g.note || ""} |`);
-    L.push("");
+    for (const g of t.glossary) {
+      L.push(`### ${g.en} ｜ ${g.zh}`);
+      if (g.note) L.push(`${g.note}`);
+      L.push("");
+      for (const e of g.examples || []) L.push(`- ${e}`);
+      L.push("");
+    }
   }
   L.push("## 双语转录全文");
   for (const s of t.segments) L.push(`**[${fmtClock(s.start)}]** ${s.text}\n\n${s.zh || ""}\n`);
@@ -634,7 +693,15 @@ export function buildNotesHtml(taskId: string): string {
   const date = new Date(t.createdAt).toLocaleDateString("zh-CN");
   const li = (arr: string[]) => arr.map((x) => `<li>${escHtml(x)}</li>`).join("");
   const glossRows = (t.glossary || [])
-    .map((g) => `<tr><td class="en">${escHtml(g.en)}</td><td>${escHtml(g.zh)}</td><td class="note">${escHtml(g.note || "")}</td></tr>`)
+    .map(
+      (g) =>
+        `<div class="gcard"><p><span class="en">${escHtml(g.en)}</span><span class="zh-term">${escHtml(g.zh)}</span></p>` +
+        (g.note ? `<p class="note">${escHtml(g.note)}</p>` : "") +
+        ((g.examples?.length ?? 0) > 0
+          ? `<ul class="ex">${g.examples!.map((e) => `<li>${escHtml(e)}</li>`).join("")}</ul>`
+          : "") +
+        `</div>`
+    )
     .join("");
   const transcript = t.segments
     .map((s) => `<div class="seg"><span class="ts">${fmtClock(s.start)}</span><div><p class="en">${escHtml(s.text)}</p><p class="zh">${escHtml(s.zh || "")}</p></div></div>`)
@@ -658,6 +725,13 @@ th,td{text-align:left;padding:10px 12px;border-bottom:1.5px solid rgba(28,25,17,
 th{color:var(--muted);font-weight:500}
 td.en{color:var(--accent);font-family:ui-monospace,monospace}
 td.note{color:var(--muted)}
+.gcard{padding:14px 0;border-bottom:1.5px solid rgba(28,25,17,.12)}
+.gcard:last-child{border-bottom:none;padding-bottom:2px}
+.gcard p{margin:0}
+.gcard .en{color:var(--accent);font-family:ui-monospace,monospace;font-size:15px}
+.gcard .zh-term{margin-left:12px;font-size:15px}
+.gcard .note{color:var(--muted);font-size:13px;margin-top:4px}
+.gcard .ex{margin:8px 0 0;padding-left:20px;font-size:13px;line-height:1.7;color:var(--text)}
 .seg{display:flex;gap:14px;padding:10px 0;border-bottom:1.5px solid rgba(28,25,17,.12)}
 .ts{color:var(--muted);font-family:ui-monospace,monospace;font-size:12px;min-width:52px;padding-top:3px}
 .en{margin:0;line-height:1.6}
@@ -670,7 +744,7 @@ footer{margin-top:48px;color:var(--muted);font-size:12px;text-align:center}
 ${t.summary?.points?.length ? `<h2>本节课要点</h2><div class="card"><ul>${li(t.summary.points)}</ul></div>` : ""}
 ${t.summary?.emphasis?.length ? `<h2>教授强调 / 疑似考点</h2><div class="card warn"><ul>${li(t.summary.emphasis)}</ul></div>` : ""}
 ${t.summary?.actions?.length ? `<h2>待办事项</h2><div class="card"><ul>${li(t.summary.actions)}</ul></div>` : ""}
-${glossRows ? `<h2>专业词表</h2><div class="card"><table><tr><th>英文术语</th><th>中文释义</th><th>说明</th></tr>${glossRows}</table></div>` : ""}
+${glossRows ? `<h2>专业词表</h2><div class="card">${glossRows}</div>` : ""}
 <h2>双语转录全文</h2><div class="card">${transcript}</div>
 <footer>由「视频快译」自动生成 · 本地处理 · 视频不出本机</footer>
 </div></body></html>`;
@@ -720,7 +794,7 @@ function noteBlocks(t: Task): { label: string; text: string }[] {
   ] as const) {
     for (const item of items) blocks.push({ label, text: item });
   }
-  for (const g of t.glossary || []) blocks.push({ label: "专业词表", text: `${g.en} ${g.zh} ${g.note || ""}` });
+  for (const g of t.glossary || []) blocks.push({ label: "专业词表", text: `${g.en} ${g.zh} ${g.note || ""} ${(g.examples || []).join(" ")}` });
   return blocks;
 }
 
