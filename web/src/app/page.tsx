@@ -97,6 +97,52 @@ export default function Home() {
   }, []);
   useEffect(() => () => pollRef.current && clearInterval(pollRef.current), []);
 
+  // 全屏播放时的键盘快捷键：← 后退 5s；→ 轻按快进 5s、按住三倍速；↑↓ 调节音量
+  useEffect(() => {
+    let rightDownAt = 0;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      const v = videoRef.current;
+      if (!v || document.fullscreenElement !== v) return;
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        v.currentTime = Math.max(0, v.currentTime - 5);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        if (!e.repeat) {
+          rightDownAt = performance.now();
+          v.playbackRate = 3;
+        }
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        v.volume = Math.min(1, v.volume + 0.05);
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        v.volume = Math.max(0, v.volume - 0.05);
+      }
+    };
+
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key !== "ArrowRight" || !rightDownAt) return;
+      const held = performance.now() - rightDownAt;
+      rightDownAt = 0;
+      const v = videoRef.current;
+      if (!v) return;
+      v.playbackRate = 1;
+      // 轻按（<250ms）视为快进 5s，按住则维持三倍速回放
+      if (held < 250 && document.fullscreenElement === v) {
+        v.currentTime = Math.min(v.duration || Infinity, v.currentTime + 5);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, []);
+
   const upload = async (file: File) => {
     if (!session) {
       openLogin();
