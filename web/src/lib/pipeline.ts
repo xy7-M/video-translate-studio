@@ -537,7 +537,6 @@ export async function analyze(taskId: string) {
   const summary: Summary = {
     points: arr(data.points),
     emphasis: arr(data.emphasis),
-
   };
   const glossary: GlossaryItem[] = (Array.isArray(data.glossary) ? data.glossary : [])
     .map((g) => {

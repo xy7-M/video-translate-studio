@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Scissors,
   Sparkles,
+  SkipForward,
   Upload,
   Zap,
 } from "lucide-react";
@@ -57,6 +58,7 @@ export default function Home() {
   const [uploading, setUploading] = useState(false);
   const [burning, setBurning] = useState(false);
   const [courseErr, setCourseErr] = useState("");
+  const [titleErr, setTitleErr] = useState("");
   const [courseKey, setCourseKey] = useState(0); // 归类失败时重挂载输入框，回滚显示值
   const [segs, setSegs] = useState<Segment[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -195,11 +197,24 @@ export default function Home() {
 
   const saveTitle = async (title: string) => {
     if (!task) return;
-    await fetch("/api/tasks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: task.id, title }),
-    }).catch(() => {});
+    const prev = task.title || "";
+    const t = title.trim();
+    setTitleErr("");
+    if (!t || t === prev) return;
+    try {
+      const r = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: task.id, title: t }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setTitleErr(j.error || "重命名失败");
+        setTask((p) => p && { ...p, title: prev }); // 回滚显示值
+      }
+    } catch {
+      /* ignore */
+    }
   };
 
   const downloadNotes = () => {
@@ -376,20 +391,31 @@ export default function Home() {
             {/* Actions */}
             <div className="panel p-6 flex flex-col gap-5">
               <div>
-                <input
-                  value={task.title || ""}
-                  placeholder={`视频 ${task.id}`}
-                  onChange={(e) => setTask((p) => p && { ...p, title: e.target.value })}
-                  onBlur={(e) => saveTitle(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-                  aria-label="自定义视频名称"
-                  className="font-medium text-lg bg-transparent w-full border-b border-dashed border-[var(--line-2)] focus:border-[var(--accent)] outline-none transition-colors duration-150 placeholder:text-[var(--muted)]"
-                />
+                <div className="flex items-center gap-2">
+                  <input
+                    value={task.title || ""}
+                    placeholder={`视频 ${task.id}`}
+                    onChange={(e) => setTask((p) => p && { ...p, title: e.target.value })}
+                    onBlur={(e) => saveTitle(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+                    aria-label="自定义视频名称"
+                    className="flex-1 min-w-0 font-medium text-lg bg-transparent border-b border-dashed border-[var(--line-2)] focus:border-[var(--accent)] outline-none transition-colors duration-150 placeholder:text-[var(--muted)]"
+                  />
+                  <button
+                    className="btn-ghost !px-3 !py-2 shrink-0"
+                    title="处理下一个视频"
+                    aria-label="处理下一个视频"
+                    onClick={() => setTask(null)}
+                  >
+                    <SkipForward {...ic} />
+                  </button>
+                </div>
                 <p className="text-sm text-[var(--muted)] mt-1 inline-flex items-center gap-1.5">
                   双语字幕已生成
                   <Check size={14} strokeWidth={2.5} className="text-[var(--ok)]" />
                   · 共 {segs.length} 句 · 标题可直接修改
                 </p>
+                {titleErr && <p className="text-xs mt-1.5" style={{ color: "var(--err)" }}>{titleErr}</p>}
               </div>
 
               {/* 课程归类 */}
@@ -430,9 +456,6 @@ export default function Home() {
                     onClick={reworkSubtitles}
                   >
                     <RefreshCw {...ic} /> 重跑字幕
-                  </button>
-                  <button className="btn-ghost" onClick={() => setTask(null)}>
-                    下一个视频
                   </button>
                 </div>
               </div>
