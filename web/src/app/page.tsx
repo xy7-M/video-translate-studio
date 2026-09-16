@@ -97,10 +97,11 @@ export default function Home() {
   }, []);
   useEffect(() => () => pollRef.current && clearInterval(pollRef.current), []);
 
-  // 全屏播放时的键盘快捷键：← 后退 5s；→ 轻按快进 5s、按住三倍速；↑↓ 调节音量
+  // 全屏播放快捷键：← 后退 5s｜→ 快进 5s（按住＝三倍速）｜↑↓ 音量｜空格 暂停/继续
+  // 用 document capture 阶段拦截：既保证收键（目标可能是 body 而非 video），
+  // 又能在浏览器原生控件执行自己的 ±5s / 音量逻辑之前 preventDefault 掉
+  const rightHeldAt = useRef(0);
   useEffect(() => {
-    let rightDownAt = 0;
-
     const onKeyDown = (e: KeyboardEvent) => {
       const v = videoRef.current;
       if (!v || document.fullscreenElement !== v) return;
@@ -110,7 +111,7 @@ export default function Home() {
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
         if (!e.repeat) {
-          rightDownAt = performance.now();
+          rightHeldAt.current = performance.now();
           v.playbackRate = 3;
         }
       } else if (e.key === "ArrowUp") {
@@ -119,28 +120,41 @@ export default function Home() {
       } else if (e.key === "ArrowDown") {
         e.preventDefault();
         v.volume = Math.max(0, v.volume - 0.05);
+      } else if (e.key === " " || e.key === "Spacebar") {
+        e.preventDefault();
+        if (v.paused) void v.play().catch(() => {});
+        else v.pause();
       }
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key !== "ArrowRight" || !rightDownAt) return;
-      const held = performance.now() - rightDownAt;
-      rightDownAt = 0;
       const v = videoRef.current;
-      if (!v) return;
+      if (!v || e.key !== "ArrowRight" || !rightHeldAt.current) return;
+      const held = performance.now() - rightHeldAt.current;
+      rightHeldAt.current = 0;
       v.playbackRate = 1;
-      // 轻按（<250ms）视为快进 5s，按住则维持三倍速回放
-      if (held < 250 && document.fullscreenElement === v) {
-        v.currentTime = Math.min(v.duration || Infinity, v.currentTime + 5);
+      // 轻按（<250ms）＝快进 5s；按住不放＝三倍速回放，松手即恢复常速
+      if (held < 250) {
+        const d = v.duration;
+        v.currentTime = Math.min(Number.isFinite(d) ? d : v.currentTime + 5, v.currentTime + 5);
       }
     };
 
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("keyup", onKeyUp);
+    document.addEventListener("keydown", onKeyDown, true);
+    document.addEventListener("keyup", onKeyUp, true);
     return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("keyup", onKeyUp);
+      document.removeEventListener("keydown", onKeyDown, true);
+      document.removeEventListener("keyup", onKeyUp, true);
     };
+  }, []);
+
+  // 退出全屏时兜底恢复倍速，避免按住→的过程中按 Esc 卡在 3 倍速
+  useEffect(() => {
+    const onFsChange = () => {
+      if (!document.fullscreenElement && videoRef.current) videoRef.current.playbackRate = 1;
+    };
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
   }, []);
 
   const upload = async (file: File) => {
@@ -448,12 +462,12 @@ export default function Home() {
                     className="flex-1 min-w-0 font-medium text-lg bg-transparent border-b border-dashed border-[var(--line-2)] focus:border-[var(--accent)] outline-none transition-colors duration-150 placeholder:text-[var(--muted)]"
                   />
                   <button
-                    className="btn-ghost !px-3 !py-2 shrink-0"
+                    className="btn-ghost !px-3 !py-2 shrink-0 inline-flex items-center gap-1.5"
                     title="处理下一个视频"
                     aria-label="处理下一个视频"
                     onClick={() => setTask(null)}
                   >
-                    <SkipForward {...ic} />
+                    <SkipForward {...ic} /> 下一条
                   </button>
                 </div>
                 <p className="text-sm text-[var(--muted)] mt-1 inline-flex items-center gap-1.5">
