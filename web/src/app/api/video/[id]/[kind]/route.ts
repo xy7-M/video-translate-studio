@@ -23,7 +23,15 @@ export async function GET(req: Request, { params }: { params: { id: string; kind
   if (range) {
     const m = /bytes=(\d*)-(\d*)/.exec(range);
     const start = m && m[1] ? parseInt(m[1], 10) : 0;
-    const end = m && m[2] ? parseInt(m[2], 10) : Math.min(start + 8 * 1024 * 1024, stat.size - 1);
+    // 浏览器（尤其 Chrome 视频流）常发 open-ended range（bytes=N-），
+    // 必须封顶到文件末尾，否则 end=NaN → 分配巨型 Buffer → 下载损坏/进程卡死
+    const end = m && m[2] ? Math.min(parseInt(m[2], 10), stat.size - 1) : Math.min(start + 8 * 1024 * 1024, stat.size - 1);
+    if (start >= stat.size || start > end) {
+      return new NextResponse(null, {
+        status: 416,
+        headers: { "Content-Range": `bytes */${stat.size}`, "Accept-Ranges": "bytes" },
+      });
+    }
     const chunk = Buffer.alloc(end - start + 1);
     const fd = fs.openSync(file, "r");
     fs.readSync(fd, chunk, 0, chunk.length, start);
