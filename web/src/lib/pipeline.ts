@@ -357,6 +357,11 @@ export async function transcribe(taskId: string) {
       HF_ENDPOINT: process.env.HF_ENDPOINT || "https://hf-mirror.com", // 国内镜像，防 HuggingFace 下载超时
       HF_HUB_DISABLE_XET: "1", // Xet 协议不走镜像会 401，强制回退普通 HTTP 下载
       HF_HOME: path.join(DATA_DIR, "hf_cache"),
+      // Python 的 httpx 会读 Windows 注册表系统代理（如 127.0.0.1:7897），
+      // 代理软件对 Python 的 CONNECT 常直接 reset，导致所有 HTTPS 失败。
+      // 强制直连：Node/curl 不受影响，仅本 Python 子进程生效。
+      NO_PROXY: "*",
+      no_proxy: "*",
     },
   });
   const segments = resegmentSegments(JSON.parse(fs.readFileSync(outJson, "utf-8")) as Segment[]);
