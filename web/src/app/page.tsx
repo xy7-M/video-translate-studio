@@ -98,14 +98,21 @@ export default function Home() {
   }, []);
   useEffect(() => () => pollRef.current && clearInterval(pollRef.current), []);
 
-  // 全屏播放快捷键：← 后退 5s｜→ 快进 5s（按住＝三倍速）｜↑↓ 音量｜空格 暂停/继续
+  // 播放快捷键（全屏与结果页内嵌播放器均生效）：← 后退 5s｜→ 快进 5s（按住＝三倍速）｜↑↓ 音量｜空格 暂停/继续
   // 用 document capture 阶段拦截：既保证收键（目标可能是 body 而非 video），
   // 又能在浏览器原生控件执行自己的 ±5s / 音量逻辑之前 preventDefault 掉
   const rightHeldAt = useRef(0);
+  // 焦点在输入框/按钮等表单控件上时不抢键盘（非全屏时），保证标题、课程输入框正常打字
+  const isFormFocus = (t: EventTarget | null) => {
+    const el = t as HTMLElement | null;
+    if (!el || !el.tagName) return false;
+    return ["INPUT", "TEXTAREA", "SELECT", "BUTTON", "A"].includes(el.tagName) || el.isContentEditable;
+  };
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const v = videoRef.current;
-      if (!v || document.fullscreenElement !== v) return;
+      if (!v) return;
+      if (document.fullscreenElement !== v && isFormFocus(e.target)) return;
       if (e.key === "ArrowLeft") {
         e.preventDefault();
         v.currentTime = Math.max(0, v.currentTime - 5);
@@ -448,7 +455,7 @@ export default function Home() {
       {/* Result */}
       {(task?.status === "ready" || task?.status === "burning" || task?.status === "done") && (
         <div className="space-y-6">
-          <div className="grid md:grid-cols-[380px_1fr] items-start gap-6">
+          <div className="grid md:grid-cols-[280px_1fr] items-start gap-6">
             {/* 左栏：视频预览 + AI 课堂摘要 */}
             <div className="flex flex-col gap-6">
             {/* Player */}
@@ -653,33 +660,62 @@ export default function Home() {
               </div>
             </div>
           )}
-          {/* 专业词表：通栏全宽，术语双列排布 */}
-          {task.glossary && task.glossary.length > 0 && (
-            <div className="panel p-6">
-              <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest mb-4">
-                专业词表 · {task.glossary.length} 个术语
-              </p>
-              <div className="grid md:grid-cols-2 gap-x-10">
-                {task.glossary.map((g, i) => (
-                  <div key={i} className="py-3 flex flex-col gap-0.5 border-b border-[var(--hair)]">
-                    <p className="text-sm">
-                      <span className="mono text-[var(--accent)]">{g.en}</span>
-                      <span className="text-[var(--text)] ml-3">{g.zh}</span>
-                    </p>
-                    {g.note && <p className="text-xs text-[var(--muted)]">{g.note}</p>}
-                    {(g.examples?.length ?? 0) > 0 && (
-                      <ul className="mt-1.5 space-y-1">
-                        {g.examples!.map((e, j) => (
-                          <li key={j} className="text-xs text-[var(--text)] leading-relaxed flex gap-1.5">
-                            <span className="mono text-[var(--muted)] shrink-0">{j + 1}.</span>
-                            <span>{e}</span>
-                          </li>
-                        ))}
+          {/* AI 课堂笔记 + 专业词表 */}
+          {(task.summary || task.glossary) && (
+            <div className="grid md:grid-cols-2 gap-6">
+              {task.summary && (task.summary.points.length || task.summary.emphasis.length) > 0 && (
+                <div className="panel p-6 space-y-5">
+                  <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest inline-flex items-center gap-1.5">
+                    <Sparkles size={13} strokeWidth={1.75} /> AI 课堂摘要
+                  </p>
+                  {task.summary.points.length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium mb-2">本节课要点</p>
+                      <ul className="space-y-1.5 text-sm text-[var(--muted)] list-disc pl-5 marker:text-[var(--accent)]">
+                        {task.summary.points.map((p, i) => <li key={i}>{p}</li>)}
                       </ul>
-                    )}
+                    </div>
+                  )}
+                  {task.summary.emphasis.length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium mb-2 inline-flex items-center gap-1.5" style={{ color: "var(--warn)" }}>
+                        <AlertTriangle size={14} strokeWidth={1.75} /> 教授强调 / 疑似考点
+                      </p>
+                      <ul className="space-y-1.5 text-sm text-[var(--muted)] list-disc pl-5 marker:text-[var(--warn)]">
+                        {task.summary.emphasis.map((p, i) => <li key={i}>{p}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+              {task.glossary && task.glossary.length > 0 && (
+                <div className="panel p-6 flex flex-col">
+                  <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest mb-4">
+                    专业词表 · {task.glossary.length} 个术语
+                  </p>
+                  <div className="flex-1 flex flex-col justify-between divide-y divide-[var(--hair)]">
+                    {task.glossary.map((g, i) => (
+                      <div key={i} className="py-3 flex flex-col gap-0.5">
+                        <p className="text-sm">
+                          <span className="mono text-[var(--accent)]">{g.en}</span>
+                          <span className="text-[var(--text)] ml-3">{g.zh}</span>
+                        </p>
+                        {g.note && <p className="text-xs text-[var(--muted)]">{g.note}</p>}
+                        {(g.examples?.length ?? 0) > 0 && (
+                          <ul className="mt-1.5 space-y-1">
+                            {g.examples!.map((e, j) => (
+                              <li key={j} className="text-xs text-[var(--text)] leading-relaxed flex gap-1.5">
+                                <span className="mono text-[var(--muted)] shrink-0">{j + 1}.</span>
+                                <span>{e}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
             </div>
           )}
         </div>
