@@ -7,7 +7,7 @@ vi.mock("./deepseek", () => ({
   deepseekText: vi.fn(),
 }));
 
-import { punctuate, resegmentSegments, buildAss, buildSrt, type Segment } from "./pipeline";
+import { punctuate, resegmentSegments, buildAss, type Segment } from "./pipeline";
 
 /** 便捷构造：按给定词序列生成 whisper 词级时间戳（默认词长 0.4s、间隔 0.1s） */
 function makeWords(
@@ -196,13 +196,6 @@ describe("buildAss 电影级字幕排版", () => {
     const ass = buildAss([seg(5.99, 5.9956, "carry.", undefined)]);
     expect(ass).toContain("0:00:05.99,0:00:06.00");
     expect(ass).not.toMatch(/:\d{2}\.\d{3}/); // 时间戳字段不得有 3 位小数（.100 之类非法值；TV.709 之类头字段不算）
-  });
-
-  it("毫秒四舍五入进位：SRT 边界值不得产生 ,1000（回归）", () => {
-    // 0.9996s ×1000 = 999.6 → 进位为 1000ms = 1.000s
-    const srt = buildSrt([seg(0.99, 0.9996, "carry over")]);
-    expect(srt).toContain("00:00:00,990 --> 00:00:01,000");
-    expect(srt).not.toContain(",1000");
   });
 });
 

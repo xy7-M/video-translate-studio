@@ -30,6 +30,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     }
     clean.push({ start, end, text, zh: zh || undefined });
   }
-  updateTask(params.id, { segments: clean, srtFile: undefined, burnedFile: undefined }); // 使旧 SRT/烧录视频失效
+  updateTask(params.id, { segments: clean, burnedFile: undefined }); // 使旧烧录视频失效
   return NextResponse.json({ ok: true });
 }

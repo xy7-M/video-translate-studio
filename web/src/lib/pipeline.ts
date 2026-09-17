@@ -43,7 +43,6 @@ export type Task = {
   videoFile: string; // absolute path
   audioFile?: string;
   segments?: Segment[];
-  srtFile?: string;
   burnedFile?: string;
   encoder?: string; // h264_nvenc / libx264
   error?: string;
@@ -132,7 +131,7 @@ export function updateTask(id: string, patch: Partial<Task>) {
 }
 
 /**
- * 删除任务及其全部磁盘产物（上传视频 / 音轨 / 中间 json / srt / 烧录 mp4 / PDF）。
+ * 删除任务及其全部磁盘产物（上传视频 / 音轨 / 中间 json / 烧录 mp4 / PDF）。
  * 只清理位于本项目 .data 目录下的文件，用户原始磁盘文件不受影响。
  * task json 损坏（OneDrive 回滚等）时仍按 id 前缀强删，避免产生删不掉的僵尸任务。
  */
@@ -146,7 +145,7 @@ export function deleteTask(id: string): boolean {
     !!p && path.resolve(p).startsWith(path.resolve(DATA_DIR) + path.sep);
 
   const targets = new Set<string>();
-  if (t) for (const p of [t.videoFile, t.audioFile, t.srtFile, t.burnedFile]) if (inData(p)) targets.add(path.resolve(p!));
+  if (t) for (const p of [t.videoFile, t.audioFile, t.burnedFile]) if (inData(p)) targets.add(path.resolve(p!));
 
   // 按 id 前缀扫工作目录与输出目录，兜住未在 task 里记录的中间产物
   for (const dir of [UPLOAD_DIR, WORK_DIR, OUT_DIR]) {
@@ -582,24 +581,6 @@ export async function analyze(taskId: string) {
   updateTask(taskId, { summary, glossary, timeline, status: "ready", progress: 92, message: "双语字幕与课堂笔记已生成" });
 }
 
-/** SRT 工具 */
-function fmtTime(sec: number): string {
-  // 先把秒四舍五入成整数毫秒再逐级进位：
-  // 直接取小数部分 round 会在 0.9995s 这类边界得到 ",1000" 非法时间戳
-  const msTotal = Math.round(Math.max(0, sec) * 1000);
-  const h = Math.floor(msTotal / 3_600_000);
-  const m = Math.floor((msTotal % 3_600_000) / 60_000);
-  const s = Math.floor((msTotal % 60_000) / 1000);
-  const ms = msTotal % 1000;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")},${String(ms).padStart(3, "0")}`;
-}
-
-export function buildSrt(segs: Segment[]): string {
-  return segs
-    .map((s, i) => `${i + 1}\n${fmtTime(s.start)} --> ${fmtTime(s.end)}\n${s.text}\n${s.zh || ""}\n`)
-    .join("\n");
-}
-
 /** 分:秒 短时长，用于 Word 表格时间列 */
 function fmtShort(sec: number): string {
   const m = Math.floor(sec / 60);
@@ -677,15 +658,6 @@ export async function buildDocx(title: string, segs: Segment[]): Promise<Buffer>
   });
 
   return Packer.toBuffer(doc);
-}
-
-export function writeSrt(taskId: string): string {
-  const t = getTask(taskId);
-  if (!t || !t.segments) throw new Error("segments missing");
-  const file = path.join(OUT_DIR, `${t.id}.srt`);
-  fs.writeFileSync(file, "\ufeff" + buildSrt(t.segments), "utf-8"); // BOM 兼容剪映/老播放器
-  updateTask(taskId, { srtFile: file });
-  return file;
 }
 
 /** ASS 时间戳：H:MM:SS.cc（厘秒），电影字幕标准精度 */
@@ -965,7 +937,6 @@ export async function reprocessSubtitles(taskId: string) {
     updateTask(taskId, {
       status: "ready",
       progress: 92,
-      srtFile: undefined,
       burnedFile: undefined,
       message: "双语字幕已按新规则重新生成",
     });
