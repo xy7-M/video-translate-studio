@@ -456,8 +456,8 @@ export default function Home() {
       {/* Result */}
       {(task?.status === "ready" || task?.status === "burning" || task?.status === "done") && (
         <div className="space-y-6">
-          <div className="grid md:grid-cols-[380px_1fr] items-start gap-6">
-            {/* 左栏：视频预览 + AI 课堂摘要 */}
+          <div className="grid md:grid-cols-[380px_1fr] items-stretch gap-6">
+            {/* 左栏：视频预览 + AI 课堂摘要（摘要卡片自动补满剩余高度） */}
             <div className="flex flex-col gap-6">
             {/* Player */}
             <div className="panel overflow-hidden">
@@ -475,7 +475,7 @@ export default function Home() {
 
             {/* AI 课堂摘要：紧跟视频下方 */}
             {task.summary && (task.summary.points.length || task.summary.emphasis.length) > 0 && (
-              <div className="panel p-6 space-y-5">
+              <div className="panel p-6 space-y-5 flex-1">
                 <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest inline-flex items-center gap-1.5">
                   <Sparkles size={13} strokeWidth={1.75} /> AI 课堂摘要
                 </p>
