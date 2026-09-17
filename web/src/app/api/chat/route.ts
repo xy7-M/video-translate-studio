@@ -10,10 +10,11 @@ export const maxDuration = 120;
 export async function POST(req: Request) {
   captureToken(req); // 问答直连 Edge Function，需要本次请求的登录 token
   const body = (await req.json()) as { question?: string; course?: string };
-  const question = (body.question || "").trim();
+  const question = (body.question || "").trim().slice(0, 2000);
   if (!question) return NextResponse.json({ error: "请输入问题" }, { status: 400 });
+  const course = typeof body.course === "string" ? body.course.trim().slice(0, 200) : "";
 
-  const corpus = retrieveCorpus(question, (body.course || "").trim() || undefined);
+  const corpus = retrieveCorpus(question, course || undefined);
   if (!corpus) {
     return NextResponse.json({
       answer: "还没有检索到相关课程内容。先在「工作台」导入几节课堂视频，转写完成后就能向我提问了。",
@@ -27,7 +28,7 @@ export async function POST(req: Request) {
         "语料中没有的内容明确说明「课程记录中未提及」，不要编造。引用时标注来源视频标题与时间戳。",
       `课堂语料：\n${corpus.slice(0, 12000)}\n\n学生问题：${question}`
     );
-    addChatHistory(question, answer, body.course); // 写入问答历史库
+    addChatHistory(question, answer, course); // 写入问答历史库
     return NextResponse.json({ answer });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });

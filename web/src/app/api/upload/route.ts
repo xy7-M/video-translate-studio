@@ -3,7 +3,7 @@ import path from "path";
 import { Readable } from "stream";
 import { pipeline as streamPipeline } from "stream/promises";
 import { NextResponse } from "next/server";
-import { UPLOAD_DIR, newTask, updateTask, runPipeline, probeDuration, MAX_DURATION_SEC, uniqueTitle } from "@/lib/pipeline";
+import { UPLOAD_DIR, newTask, deleteTask, updateTask, runPipeline, probeDuration, MAX_DURATION_SEC, uniqueTitle } from "@/lib/pipeline";
 import { captureToken } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -35,15 +35,16 @@ export async function POST(req: Request) {
     await streamPipeline(Readable.fromWeb(file.stream() as never), fs.createWriteStream(dest));
   } catch (e) {
     fs.rmSync(dest, { force: true });
+    deleteTask(task.id);
     return NextResponse.json({ error: `保存失败：${e instanceof Error ? e.message : e}` }, { status: 500 });
   }
   updateTask(task.id, { videoFile: dest });
 
-  // 时长校验：超过 2 小时直接拒绝并清理
+  // 时长校验：超过 2 小时直接拒绝并清理（前端收 400 不会轮询，task 记录也一并删除防僵尸任务）
   const dur = await probeDuration(dest);
   if (dur !== null && dur > MAX_DURATION_SEC) {
     fs.rmSync(dest, { force: true });
-    updateTask(task.id, { status: "error", error: `视频时长 ${Math.round(dur / 60)} 分钟，超过 2 小时上限` });
+    deleteTask(task.id);
     return NextResponse.json({ error: `视频时长超过 2 小时上限（当前 ${Math.round(dur / 60)} 分钟）` }, { status: 400 });
   }
 

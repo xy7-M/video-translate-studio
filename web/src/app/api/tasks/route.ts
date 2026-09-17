@@ -24,9 +24,11 @@ export async function GET() {
 export async function POST(req: Request) {
   const body = (await req.json()) as { id?: string; course?: string; title?: string };
   if (!body.id) return NextResponse.json({ error: "缺少 id" }, { status: 400 });
+  const MAX_LEN = 200;
 
   const patch: { course?: string; title?: string } = {};
   if (typeof body.course === "string") {
+    if (body.course.length > MAX_LEN) return NextResponse.json({ error: "课程名过长（最多 200 字）" }, { status: 400 });
     const course = body.course.trim();
     // 课程名不可重复：与既有频道只差大小写/空格时拒绝，提示直接复用已有名
     const variant = findCourseVariant(course, body.id);
@@ -39,6 +41,7 @@ export async function POST(req: Request) {
     patch.course = course || undefined;
   }
   if (typeof body.title === "string") {
+    if (body.title.length > MAX_LEN) return NextResponse.json({ error: "标题过长（最多 200 字）" }, { status: 400 });
     const title = body.title.trim();
     // 视频标题不可完全相同：与其他任务的标题重复（忽略大小写/首尾空格）时拒绝
     const taken = findTitleTaken(title, body.id);

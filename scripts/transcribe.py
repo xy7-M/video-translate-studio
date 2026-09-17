@@ -73,10 +73,12 @@ def main() -> int:
         if not text:
             continue
         entry = {"start": round(seg.start, 3), "end": round(seg.end, 3), "text": text}
+        # faster-whisper 个别词的 start/end 可能为 None（静音/音乐段），
+        # round(None) 会抛 TypeError 让整个转写崩溃；跳过这些词
         words = [
             {"w": (wd.word or "").strip(), "s": round(wd.start, 3), "e": round(wd.end, 3)}
             for wd in (seg.words or [])
-            if (wd.word or "").strip()
+            if (wd.word or "").strip() and wd.start is not None and wd.end is not None
         ]
         if words:
             entry["words"] = words

@@ -1,4 +1,5 @@
 import fs from "fs";
+import path from "path";
 import { NextResponse } from "next/server";
 import { getTask } from "@/lib/pipeline";
 
@@ -11,7 +12,16 @@ export async function GET(req: Request, { params }: { params: { id: string; kind
   if (!file || !fs.existsSync(file)) return NextResponse.json({ error: "文件不存在" }, { status: 404 });
 
   const stat = fs.statSync(file);
-  const type = "video/mp4";
+  // 烧录版恒为 mp4；原视频按真实扩展名给 MIME，否则 mov/mkv/webm 预览失败
+  const MIME: Record<string, string> = {
+    ".mp4": "video/mp4",
+    ".m4v": "video/x-m4v",
+    ".mov": "video/quicktime",
+    ".webm": "video/webm",
+    ".mkv": "video/x-matroska",
+    ".avi": "video/x-msvideo",
+  };
+  const type = params.kind === "burned" ? "video/mp4" : MIME[path.extname(file).toLowerCase()] || "application/octet-stream";
   const range = req.headers.get("range");
   // ?dl=1 时作为附件下载（用中文标题命名），否则供 <video> 预览
   const url = new URL(req.url);
@@ -21,11 +31,22 @@ export async function GET(req: Request, { params }: { params: { id: string; kind
   const extraHeaders: Record<string, string> = dl ? { "Content-Disposition": disposition } : {};
 
   if (range) {
-    const m = /bytes=(\d*)-(\d*)/.exec(range);
-    const start = m && m[1] ? parseInt(m[1], 10) : 0;
+    const m = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+    const rawStart = m && m[1] ? Number(m[1]) : 0;
+    const rawEnd = m && m[2] ? Number(m[2]) : NaN;
+    // 非法 Range（如 bytes=abc-）必须回 416，否则 NaN 透传给 Buffer.alloc 会抛异常 → 500
+    if (!m || !Number.isFinite(rawStart) || (m[2] !== "" && !Number.isFinite(rawEnd))) {
+      return new NextResponse(null, {
+        status: 416,
+        headers: { "Content-Range": `bytes */${stat.size}`, "Accept-Ranges": "bytes" },
+      });
+    }
+    const start = Math.max(0, Math.floor(rawStart));
     // 浏览器（尤其 Chrome 视频流）常发 open-ended range（bytes=N-），
     // 必须封顶到文件末尾，否则 end=NaN → 分配巨型 Buffer → 下载损坏/进程卡死
-    const end = m && m[2] ? Math.min(parseInt(m[2], 10), stat.size - 1) : Math.min(start + 8 * 1024 * 1024, stat.size - 1);
+    const end = Number.isFinite(rawEnd)
+      ? Math.min(Math.floor(rawEnd), stat.size - 1)
+      : Math.min(start + 8 * 1024 * 1024, stat.size - 1);
     if (start >= stat.size || start > end) {
       return new NextResponse(null, {
         status: 416,
