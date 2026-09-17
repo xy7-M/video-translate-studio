@@ -102,8 +102,6 @@ export default function Home() {
   // 用 document capture 阶段拦截：既保证收键（目标可能是 body 而非 video），
   // 又能在浏览器原生控件执行自己的 ±5s / 音量逻辑之前 preventDefault 掉
   const rightHeldAt = useRef(0);
-  // 仅文本输入框（标题、课程归类）里放行键盘，保证正常打字；
-  // 其余焦点（body / video / 按钮）一律拦截，空格永远走暂停/继续而非浏览器默认的滚动或缩放
   const isTextFocus = (t: EventTarget | null) => {
     const el = t as HTMLElement | null;
     if (!el || !el.tagName) return false;
@@ -113,7 +111,10 @@ export default function Home() {
     const onKeyDown = (e: KeyboardEvent) => {
       const v = videoRef.current;
       if (!v) return;
-      if (document.fullscreenElement !== v && isTextFocus(e.target)) return;
+      // 焦点在标题/课程输入框时，只放行"打字"（可打印字符与空格），
+      // 方向键仍穿透去控制视频——否则改完标题后焦点留在输入框，方向键会全部失效
+      const typing = isTextFocus(e.target) && (e.key === " " || e.key === "Spacebar" || e.key.length === 1);
+      if (document.fullscreenElement !== v && typing) return;
       if (e.key === "ArrowLeft") {
         e.preventDefault();
         v.currentTime = Math.max(0, v.currentTime - 5);
