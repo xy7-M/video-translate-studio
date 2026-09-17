@@ -595,19 +595,83 @@ export function buildSrt(segs: Segment[]): string {
     .join("\n");
 }
 
-/** 纯文本双语对照字幕：记事本/WPS 可直接打开阅读 */
+/** 分:秒 短时长，用于 Word 表格时间列 */
 function fmtShort(sec: number): string {
   const m = Math.floor(sec / 60);
   const s = Math.floor(sec % 60);
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-export function buildTxt(title: string, segs: Segment[]): string {
-  const head = `${title || "字幕文本"} · 双语字幕（共 ${segs.length} 句）\n${"=".repeat(40)}\n\n`;
-  const body = segs
-    .map((s, i) => `${i + 1}. [${fmtShort(s.start)} → ${fmtShort(s.end)}]\n${s.text}\n${s.zh || ""}\n`)
-    .join("\n");
-  return head + body;
+/** Word 双语字幕表：三列表格（时间 / 英文 / 中文），Word 与 WPS 均可直接打开 */
+export async function buildDocx(title: string, segs: Segment[]): Promise<Buffer> {
+  const {
+    Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
+    WidthType, AlignmentType, BorderStyle, ShadingType,
+  } = await import("docx");
+
+  const ink = "1C1911";
+  const line = { style: BorderStyle.SINGLE, size: 6, color: "C9BFAE" } as const;
+  const borders = { top: line, bottom: line, left: line, right: line };
+
+  const cell = (
+    text: string,
+    opts: { bold?: boolean; width?: number; shade?: string; align?: (typeof AlignmentType)[keyof typeof AlignmentType] } = {},
+  ) =>
+    new TableCell({
+      borders,
+      width: { size: opts.width ?? 33, type: WidthType.PERCENTAGE },
+      shading: opts.shade ? { type: ShadingType.CLEAR, fill: opts.shade } : undefined,
+      margins: { top: 60, bottom: 60, left: 120, right: 120 },
+      children: [
+        new Paragraph({
+          alignment: opts.align,
+          children: [new TextRun({ text: text || "", bold: opts.bold, size: 20, color: ink, font: "Microsoft YaHei" })],
+        }),
+      ],
+    });
+
+  const headRow = new TableRow({
+    tableHeader: true,
+    children: [
+      cell("时间", { bold: true, width: 16, shade: "F5F0E8", align: AlignmentType.CENTER }),
+      cell("英文字幕", { bold: true, width: 42, shade: "F5F0E8" }),
+      cell("中文字幕", { bold: true, width: 42, shade: "F5F0E8" }),
+    ],
+  });
+
+  const rows = segs.map(
+    (s) =>
+      new TableRow({
+        children: [
+          cell(`${fmtShort(s.start)} → ${fmtShort(s.end)}`, { width: 16, align: AlignmentType.CENTER }),
+          cell(s.text, { width: 42 }),
+          cell(s.zh || "", { width: 42 }),
+        ],
+      }),
+  );
+
+  const doc = new Document({
+    creator: "视频快译",
+    title: title || "双语字幕",
+    sections: [
+      {
+        properties: { page: { margin: { top: 900, bottom: 900, left: 1000, right: 1000 } } },
+        children: [
+          new Paragraph({
+            spacing: { after: 120 },
+            children: [new TextRun({ text: title || "双语字幕", bold: true, size: 32, color: ink, font: "Microsoft YaHei" })],
+          }),
+          new Paragraph({
+            spacing: { after: 240 },
+            children: [new TextRun({ text: `共 ${segs.length} 句 · 由「视频快译」生成`, size: 20, color: "7A7468", font: "Microsoft YaHei" })],
+          }),
+          new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [headRow, ...rows] }),
+        ],
+      },
+    ],
+  });
+
+  return Packer.toBuffer(doc);
 }
 
 export function writeSrt(taskId: string): string {

@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
-  AlignLeft,
   Check,
   Clapperboard,
   Download,
@@ -12,6 +11,7 @@ import {
   Scissors,
   Sparkles,
   SkipForward,
+  Table,
   Upload,
   Zap,
 } from "lucide-react";
@@ -190,11 +190,11 @@ export default function Home() {
     a.click();
   };
 
-  const downloadTxt = async () => {
+  const downloadDocx = async () => {
     if (!task) return;
     const a = document.createElement("a");
-    a.href = `/api/subtitle/${task.id}?fmt=txt`;
-    a.download = `subtitle-${task.title || task.id}.txt`;
+    a.href = `/api/subtitle/${task.id}?fmt=docx`;
+    a.download = `subtitle-${task.title || task.id}.docx`;
     a.click();
   };
 
@@ -515,25 +515,73 @@ export default function Home() {
                 {courseErr && <p className="text-xs mt-1.5 px-1" style={{ color: "var(--err)" }}>{courseErr}</p>}
               </div>
 
-              {/* 导出 + 烧录 */}
+              {/* 主行动：烧录双语视频（核心功能，独立贴纸条） */}
+              <div
+                className="relative flex flex-wrap items-center justify-between gap-x-6 gap-y-4 rounded-[16px] px-5 pt-5 pb-4"
+                style={{
+                  border: "1.5px solid var(--line)",
+                  background: "var(--panel)",
+                  boxShadow: "4px 4px 0 rgba(28,25,17,.14)",
+                  transform: "rotate(-0.4deg)",
+                }}
+              >
+                <span
+                  className="badge-note absolute -top-3 left-5 mono px-2.5 py-0.5 text-[11px]"
+                  style={{ transform: "rotate(3deg)" }}
+                >
+                  ★ 核心功能
+                </span>
+                <div className="min-w-0">
+                  <p className="font-medium">一键烧录双语字幕视频</p>
+                  <p className="text-xs text-[var(--muted)] mt-0.5">
+                    中英字幕压进画面，导出后可直接在手机、课堂回放
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  {burning || task.status === "burning" ? (
+                    <button className="btn-hero" disabled>
+                      <RefreshCw size={16} strokeWidth={1.75} className="shrink-0 animate-spin" />
+                      烧录中 {task.progress}%
+                    </button>
+                  ) : (
+                    <button className="btn-hero" disabled={stepIndex < 5} onClick={burnVideo}>
+                      <Clapperboard size={17} strokeWidth={1.75} className="shrink-0" />
+                      {task.status === "done" ? "重新烧录双语视频" : "烧录双语视频"}
+                    </button>
+                  )}
+                  {task.status === "done" ? (
+                    <a
+                      href={`/api/video/${task.id}/burned?dl=1`}
+                      className="text-sm text-[var(--ok)] inline-flex items-center gap-1.5 underline underline-offset-4"
+                      download
+                    >
+                      <Download size={14} strokeWidth={1.75} /> 下载烧录版 mp4
+                    </a>
+                  ) : (
+                    <span className="text-xs text-[var(--muted)]">
+                      {task.encoder
+                        ? task.encoder === "h264_nvenc"
+                          ? "GPU 加速已就绪"
+                          : "CPU 编码，耗时稍长"
+                        : "生成后可在预览区播放"}
+                    </span>
+                  )}
+                </div>
+              </div>
+              {burning && <p className="text-sm text-[var(--accent)] mono animate-pulse -mt-2"> {task.message}</p>}
+
+              {/* 导出 */}
               <div>
-                <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest mb-2">导出与烧录</p>
+                <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest mb-2">导出与重跑</p>
                 <div className="flex flex-wrap gap-3">
                   <button className="btn-primary" onClick={downloadSrt}>
                     <Download {...ic} /> 下载 SRT 字幕
                   </button>
-                  <button className="btn-ghost" onClick={downloadTxt} title="纯文本双语对照，记事本可直接打开">
-                    <AlignLeft {...ic} /> 字幕 TXT
+                  <button className="btn-ghost" onClick={downloadDocx} title="中英字幕对照表格，Word / WPS 可直接打开">
+                    <Table {...ic} /> 字幕 Word
                   </button>
                   <button className="btn-ghost" onClick={downloadNotes}>
                     <FileText {...ic} /> 复习笔记 MD
-                  </button>
-                  <button
-                    className="btn-ghost"
-                    disabled={burning || task.status === "burning" || stepIndex < 5}
-                    onClick={burnVideo}
-                  >
-                    <Clapperboard {...ic} /> 烧录双语视频
                   </button>
                   <button
                     className="btn-ghost"
@@ -545,27 +593,14 @@ export default function Home() {
                   </button>
                 </div>
               </div>
-
-              {task.status === "done" && (
-                <div className="flex items-center gap-4">
-                  <a
-                    href={`/api/video/${task.id}/burned?dl=1`}
-                    className="text-sm text-[var(--ok)] inline-flex items-center gap-1.5 underline underline-offset-4"
-                    download
-                  >
-                    <Download size={14} strokeWidth={1.75} /> 下载烧录版 mp4
-                  </a>
-                  {task.encoder && (
-                    <span
-                      className="text-[11px] mono inline-flex items-center gap-1 px-2 py-1 rounded-full"
-                      style={{ border: "1.5px solid var(--line)", color: task.encoder === "h264_nvenc" ? "var(--warn)" : "var(--muted)" }}
-                    >
-                      {task.encoder === "h264_nvenc" ? <><Zap size={12} strokeWidth={2} /> NVENC GPU 编码</> : "CPU libx264"}
-                    </span>
-                  )}
-                </div>
+              {task.encoder && task.status === "done" && (
+                <span
+                  className="text-[11px] mono inline-flex items-center gap-1 px-2 py-1 rounded-full"
+                  style={{ border: "1.5px solid var(--line)", color: task.encoder === "h264_nvenc" ? "var(--warn)" : "var(--muted)" }}
+                >
+                  {task.encoder === "h264_nvenc" ? <><Zap size={12} strokeWidth={2} /> NVENC GPU 编码</> : "CPU libx264"}
+                </span>
               )}
-              {burning && <p className="text-sm text-[var(--accent)] mono animate-pulse"> {task.message} {task.progress}%</p>}
             </div>
           </div>
 
