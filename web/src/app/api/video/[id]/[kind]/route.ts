@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { Readable } from "stream";
 import { NextResponse } from "next/server";
 import { getTask } from "@/lib/pipeline";
 
@@ -69,7 +70,9 @@ export async function GET(req: Request, { params }: { params: { id: string; kind
     });
   }
 
-  return new NextResponse(fs.readFileSync(file), {
+  // 无 Range：流式返回，避免 readFileSync 把最大 2GB 的视频整个读进内存导致 OOM
+  const stream = Readable.toWeb(fs.createReadStream(file)) as unknown as ReadableStream;
+  return new NextResponse(stream, {
     headers: {
       "Content-Type": type,
       "Content-Length": String(stat.size),
