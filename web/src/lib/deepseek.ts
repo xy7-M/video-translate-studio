@@ -30,7 +30,17 @@ async function chat(system: string, user: string, json: boolean, temperature: nu
   if (!resp.ok) {
     const body = await resp.text().catch(() => "");
     if (resp.status === 401) throw new Error("登录已失效，请重新登录");
-    if (resp.status === 402) throw new Error("该账号未开通 AI 服务");
+    if (resp.status === 402) {
+      // 网关返回 { error: "未激活：..." }，透传给前端引导用户去设置里激活
+      let msg = "该账号未激活，请在「设置 → 软件许可」输入激活码";
+      try {
+        const j = JSON.parse(body) as { error?: string };
+        if (j.error) msg = j.error;
+      } catch {
+        /* 保留默认文案 */
+      }
+      throw new Error(msg);
+    }
     if (resp.status === 429) throw new Error("今日 AI 额度已用完，请明天再试");
     throw new Error(`AI 服务异常 (${resp.status}): ${body.slice(0, 200)}`);
   }

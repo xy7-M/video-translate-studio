@@ -12,6 +12,8 @@ const path = require("path");
 const fs = require("fs");
 const net = require("net");
 const http = require("http");
+const os = require("os");
+const crypto = require("crypto");
 
 const APP_NAME = "视频快译";
 const DEV_URL = process.env.VTS_DEV_URL || ""; // 开发联调：直接加载已在运行的 next dev
@@ -357,12 +359,52 @@ async function createWindow(url) {
   });
 }
 
+// ───────────────── 设备指纹（激活码绑定用） ─────────────────
+// 优先取 Windows MachineGuid（重装系统前稳定），叠加硬件摘要做哈希；
+// 首次计算后持久化进 config.json，之后即使网卡切换/信息波动也保持不变，避免误判换机。
+let deviceIdCache = "";
+function getDeviceId() {
+  if (deviceIdCache) return deviceIdCache;
+  const saved = readConfig().deviceId;
+  if (saved && String(saved).length >= 16) {
+    deviceIdCache = String(saved);
+    return deviceIdCache;
+  }
+  let machineGuid = "";
+  try {
+    const out = execSync(
+      'reg query "HKLM\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid',
+      { windowsHide: true, timeout: 5000 }
+    ).toString();
+    const m = /MachineGuid\s+REG_SZ\s+(\S+)/i.exec(out);
+    if (m) machineGuid = m[1];
+  } catch {
+    /* 非 Windows 或注册表不可读，走兜底 */
+  }
+  const mac =
+    Object.values(os.networkInterfaces())
+      .flat()
+      .filter((i) => i && i.mac && i.mac !== "00:00:00:00:00:00")
+      .map((i) => i.mac)
+      .sort()[0] || "";
+  const raw = [machineGuid || os.hostname(), mac, os.cpus()[0]?.model || "", os.arch(), String(os.totalmem())].join("|");
+  const id = "dev-" + crypto.createHash("sha256").update(raw).digest("hex").slice(0, 32);
+  deviceIdCache = id;
+  try {
+    writeConfig({ deviceId: id });
+  } catch {
+    /* 写失败不影响本次使用 */
+  }
+  return id;
+}
+
 // ─────────────────────────── IPC ───────────────────────────
 ipcMain.handle("app:info", () => ({
   version: app.getVersion(),
   feed: currentFeed(),
   defaultFeed: DEFAULT_FEED,
 }));
+ipcMain.handle("device:id", () => getDeviceId());
 ipcMain.handle("updater:check", () => manualCheck());
 ipcMain.handle("updater:restart", () => {
   autoUpdater.quitAndInstall();

@@ -4,23 +4,44 @@ import { useEffect, useState } from "react";
 import {
   Cloud,
   Download,
+  KeyRound,
   RefreshCw,
   Settings,
   X,
 } from "lucide-react";
 import type { DesktopUpdateStatus } from "@/desktop";
+import { authedFetch } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth-context";
 
 const ic = { size: 15, strokeWidth: 1.75, className: "shrink-0" } as const;
 
-/** 顶部齿轮按钮 + 设置弹窗（AI 服务说明 / 版本更新） */
+/** 顶部齿轮按钮 + 设置弹窗（AI 服务说明 / 软件许可 / 版本更新） */
 export default function SettingsModal() {
   const [open, setOpen] = useState(false);
   const [app, setApp] = useState<{ version: string; feed: string } | null>(null);
   const [feedVal, setFeedVal] = useState("");
   const [feedSaved, setFeedSaved] = useState(false);
   const [upd, setUpd] = useState<DesktopUpdateStatus | null>(null);
+  const { session } = useAuth();
+
+  // 软件许可状态：none | active；redeem 反馈
+  const [licStatus, setLicStatus] = useState<"unknown" | "none" | "active">("unknown");
+  const [licCode, setLicCode] = useState("");
+  const [licMsg, setLicMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [licBusy, setLicBusy] = useState(false);
 
   const desktop = typeof window !== "undefined" ? window.desktop : undefined;
+
+  // 取设备指纹：桌面版用硬件摘要；浏览器开发态用固定占位（不影响线上用户）
+  const deviceId = async (): Promise<string> => {
+    try {
+      const id = await desktop?.getDeviceId();
+      if (id && id.length >= 8) return id;
+    } catch {
+      /* fallthrough */
+    }
+    return "browser-dev-0000";
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -29,6 +50,65 @@ export default function SettingsModal() {
       setFeedVal(i.feed || "");
     });
   }, [open, desktop]);
+
+  // 打开设置且已登录时查询许可状态
+  useEffect(() => {
+    if (!open || !session) {
+      if (!session) setLicStatus("none");
+      return;
+    }
+    let dead = false;
+    void (async () => {
+      try {
+        const r = await authedFetch("/api/license", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "state", device: await deviceId() }),
+        });
+        const d = (await r.json()) as { status?: string };
+        if (!dead) setLicStatus(d.status === "active" ? "active" : "none");
+      } catch {
+        if (!dead) setLicStatus("unknown");
+      }
+    })();
+    return () => {
+      dead = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, session]);
+
+  const redeem = async () => {
+    if (!session) {
+      setLicMsg({ text: "请先登录后再激活", ok: false });
+      return;
+    }
+    const code = licCode.trim().toUpperCase();
+    if (code.length < 8) {
+      setLicMsg({ text: "激活码格式不正确", ok: false });
+      return;
+    }
+    setLicBusy(true);
+    setLicMsg(null);
+    try {
+      const r = await authedFetch("/api/license", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "redeem", code, device: await deviceId() }),
+      });
+      const d = (await r.json()) as { ok?: boolean; error?: string };
+      if (d.ok) {
+        setLicStatus("active");
+        setLicCode("");
+        setLicMsg({ text: "激活成功，感谢支持！", ok: true });
+      } else {
+        setLicMsg({ text: d.error || "激活失败，请稍后重试", ok: false });
+      }
+    } catch {
+      setLicMsg({ text: "网络异常，激活失败", ok: false });
+    } finally {
+      setLicBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (!desktop) return;
@@ -97,6 +177,55 @@ export default function SettingsModal() {
                 翻译、标点校对与课堂笔记由登录账号统一提供，无需配置任何 API 密钥。
                 视频转写与全部数据仍保存在本机，视频不出本机。
               </p>
+            </section>
+
+            {/* 软件许可：激活码兑换 + 设备绑定 */}
+            <section className="space-y-3 border-t border-dashed border-[var(--line)] pt-5">
+              <div className="flex items-center justify-between">
+                <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest inline-flex items-center gap-1.5">
+                  <KeyRound size={13} strokeWidth={1.75} /> 软件许可
+                </p>
+                <span
+                  className="text-[11px] mono px-2 py-0.5 rounded-full"
+                  style={{
+                    border: "1.5px solid var(--line)",
+                    color: licStatus === "active" ? "var(--ok)" : "var(--muted)",
+                  }}
+                >
+                  {licStatus === "active" ? "已激活 · 本设备" : licStatus === "unknown" ? "状态未知" : "未激活"}
+                </span>
+              </div>
+
+              {licStatus === "active" ? (
+                <p className="text-sm text-[var(--ok)]">
+                  已绑定本机与当前账号 ✓ 换电脑请先联系客服解绑。
+                </p>
+              ) : (
+                <>
+                  <p className="text-xs text-[var(--muted)] leading-relaxed">
+                    购买激活码后，在下方输入即可解锁全部 AI 功能。每个激活码绑定一台设备。
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      value={licCode}
+                      onChange={(e) => setLicCode(e.target.value.toUpperCase())}
+                      onKeyDown={(e) => e.key === "Enter" && redeem()}
+                      placeholder="如：VTS-XXXX-XXXX-XXXX"
+                      maxLength={40}
+                      aria-label="激活码"
+                      className="flex-1 min-w-0 bg-transparent border border-[var(--line)] rounded-full px-4 py-2 text-sm mono tracking-wider outline-none focus:border-[var(--accent)] transition-colors duration-150"
+                    />
+                    <button className="btn-primary whitespace-nowrap" onClick={redeem} disabled={licBusy}>
+                      {licBusy ? "激活中…" : "激活"}
+                    </button>
+                  </div>
+                  {licMsg && (
+                    <p className="text-xs" style={{ color: licMsg.ok ? "var(--ok)" : "var(--err)" }}>
+                      {licMsg.text}
+                    </p>
+                  )}
+                </>
+              )}
             </section>
 
             {/* 桌面版更新 */}

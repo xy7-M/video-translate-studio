@@ -47,6 +47,24 @@ Deno.serve(async (req) => {
     return json({ error: "无法验证登录状态" }, 401);
   }
 
+  // 许可门禁：未持有有效激活码的账号一律 402（变现闸门，先于配额检查）
+  try {
+    const lic = await fetch(`${url}/rest/v1/rpc/has_license`, {
+      method: "POST",
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ p_user: userId }),
+    });
+    if ((await lic.json()) !== true) {
+      return json({ error: "未激活：请在「设置 → 软件许可」中输入激活码" }, 402);
+    }
+  } catch {
+    return json({ error: "许可校验服务异常，请稍后重试" }, 500);
+  }
+
   // 原子配额：consume_ai_quota 返回 true 表示未超限
   let allowed = false;
   try {
