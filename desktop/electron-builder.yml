@@ -45,6 +45,17 @@ nsis:
   include: build/installer.nsh
   artifactName: VideoTranslate-Setup-${version}.${ext}
 
+# macOS 构建（由 GitHub Actions macos-latest runner 触发，本机不打 mac 包）
+mac:
+  target:
+    - target: dmg
+      arch: [x64]
+  category: public.app-category.education
+  hardenedRuntime: false          # 未做代码签名，关闭 hardened runtime 避免 Gatekeeper 拦截
+  gatekeeperAssess: false
+  identity: null                  # 不签名（无 Apple Developer 证书）
+  artifactName: VideoTranslate-${version}-macOS.${ext}
+
 # 仅用于生成 latest.yml；真正的 feed 地址由主进程 setFeedURL 控制
 publish:
   - provider: generic

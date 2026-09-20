@@ -3,6 +3,10 @@ import fs from "fs";
 import path from "path";
 
 export const runtime = "nodejs";
+// 安装包在磁盘上随时可能替换，绝不能在 next build 时预渲染本路由——
+// 否则 Next 会把当时的安装包（1.2GB）整个缓存成 download.body 打进安装包，
+// 既让产物虚胖 1.2GB，又会撑爆 32 位 makensis 的 mmap 导致打包失败。
+export const dynamic = "force-dynamic";
 
 /** 安装包候选目录（按优先级），可用环境变量 SETUP_DIR 覆盖首位 */
 const CANDIDATE_DIRS = [
@@ -15,6 +19,9 @@ const CANDIDATE_DIRS = [
 /** 只认 electron-builder 产物命名，防目录穿越 */
 const EXE_RE = /^VideoTranslate-Setup-[\d.]+\.exe$/;
 
+/** 健康安装包最小体积（NSIS + Electron + Python + faster-whisper 模型 ≈ 1.2GB，留 50MB 下限） */
+const MIN_HEALTHY_BYTES = 50 * 1024 * 1024;
+
 function cmpVersion(a: string, b: string) {
   const va = a.match(/[\d.]+/)![0].split(".").map(Number);
   const vb = b.match(/[\d.]+/)![0].split(".").map(Number);
@@ -22,7 +29,7 @@ function cmpVersion(a: string, b: string) {
   return 0;
 }
 
-/** 在 dir（及其一级子目录，electron-builder 按版本分目录）中找版本号最高的安装包 */
+/** 在 dir（及其一级子目录，electron-builder 按版本分目录）中找版本号最高的健康安装包 */
 function findLatestSetup(): string | null {
   const found: string[] = [];
   for (const dir of CANDIDATE_DIRS) {
@@ -43,8 +50,17 @@ function findLatestSetup(): string | null {
     }
   }
   if (!found.length) return null;
-  found.sort((a, b) => cmpVersion(path.basename(a), path.basename(b)));
-  return found[0];
+  // 过滤掉损坏的安装包（断电/OneDrive 同步未完成等导致 < 50MB）
+  const healthy = found.filter((p) => {
+    try {
+      return fs.statSync(p).size >= MIN_HEALTHY_BYTES;
+    } catch {
+      return false;
+    }
+  });
+  if (!healthy.length) return null;
+  healthy.sort((a, b) => cmpVersion(path.basename(a), path.basename(b)));
+  return healthy[0];
 }
 
 export async function GET() {

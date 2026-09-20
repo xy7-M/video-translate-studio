@@ -169,7 +169,7 @@ export default function IntroPage() {
       {/* ── Hero ── */}
       <section className="panel glow-border relative mb-16 overflow-hidden px-8 py-12 text-center sm:px-14 sm:py-16">
         <span className="badge-note absolute left-6 top-6 px-3 py-0.5 text-sm">
-          v0.1.2 · Windows
+          v0.1.3 · Windows
         </span>
         <span className="badge-note absolute right-6 top-6 px-3 py-0.5 text-sm" style={{ background: "var(--note)" }}>
           本地优先
@@ -308,7 +308,7 @@ export default function IntroPage() {
           </a>
         </div>
         <p className="mt-4 text-xs text-[var(--muted)]">
-          v0.1.2 · 约 1.3 GB · 卸载时保留你的视频与笔记数据
+          v0.1.3 · 约 1.3 GB · 卸载时保留你的视频与笔记数据
         </p>
       </section>
 

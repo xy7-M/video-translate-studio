@@ -29,3 +29,8 @@ __pycache__/
 .baoyu-skills/
 image-cards/
 *.docx
+
+# IDE 本地配置
+.trae/
+.vscode/
+.idea/

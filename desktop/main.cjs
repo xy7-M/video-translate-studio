@@ -159,8 +159,14 @@ function waitForServer(port, timeoutMs = 120000) {
 // ───────────────────── 启动 Next standalone 服务 ─────────────────────
 function startServer(port) {
   const serverJs = path.join(RES, "server", "server.js");
-  const pythonExe = path.join(RES, "runtime", "python", "python.exe");
-  const ffmpegExe = path.join(RES, "runtime", "ffmpeg", "ffmpeg.exe");
+  // 便携运行时按平台选择：Windows 是嵌入式 python.exe，macOS/Linux 是 venv 的 bin/python
+  const isWin = process.platform === "win32";
+  const pythonExe = isWin
+    ? path.join(RES, "runtime", "python", "python.exe")
+    : path.join(RES, "runtime", "python", "bin", "python3");
+  const ffmpegExe = isWin
+    ? path.join(RES, "runtime", "ffmpeg", "ffmpeg.exe")
+    : path.join(RES, "runtime", "ffmpeg", "ffmpeg");
 
   if (!fs.existsSync(serverJs)) throw new Error(`缺少服务文件：${serverJs}`);
 

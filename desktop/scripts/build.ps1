@@ -1,4 +1,4 @@
-﻿﻿# 视频快译 · 一键打包脚本
+﻿# 视频快译 · 一键打包脚本
 # 用法：双击 一键打包.bat，或 powershell -File scripts\build.ps1
 $ErrorActionPreference = "Stop"
 $desktop = Split-Path -Parent $PSScriptRoot
@@ -120,32 +120,38 @@ try {
 
   # 6. 打包
   $ver = (Get-Content (Join-Path $desktop "package.json") -Raw | ConvertFrom-Json).version
-  $outDir = Join-Path $buildOut $ver
-  if (Test-Path $outDir) {
-    Write-Host "清理旧产物 $outDir"
-    Remove-Item $outDir -Recurse -Force -ErrorAction SilentlyContinue
+  # 注意：命令行 -c.directories.output 会整体覆盖 yml 里的 dist/${version}，
+  # 产物直接落在 $buildOut 根目录（不是 $buildOut\$ver）。
+  $outDir = $buildOut
+  $oldUnpacked = Join-Path $buildOut "win-unpacked"
+  if (Test-Path $oldUnpacked) {
+    Write-Host "清理旧 win-unpacked"
+    Remove-Item $oldUnpacked -Recurse -Force -ErrorAction SilentlyContinue
   }
   Step "6/6 electron-builder 打包（压缩约 10-20 分钟）"
   & (Join-Path $desktop "node_modules\.bin\electron-builder.cmd") --win nsis --x64 --publish never "-c.directories.output=$($buildOut -replace '\\','/')"
   if ($LASTEXITCODE -ne 0) { throw "electron-builder 失败" }
 
-  # 交付：D 盘 + 更新源暂存
+  # 交付：D 盘 + 更新源暂存（只收当前版本的文件 + latest.yml，避免把历史版本一起搬走）
   Step "交付安装包"
   $deliver = "D:\Item AI\Claude Code\视频快译安装包"
   New-Item -ItemType Directory -Force -Path $deliver | Out-Null
-  Get-ChildItem $outDir -File | Where-Object { $_.Extension -in ".exe", ".yml", ".blockmap" } |
-    ForEach-Object { Copy-Item $_.FullName $deliver -Force }
+  $artifacts = Get-ChildItem $outDir -File | Where-Object {
+    ($_.Name -like "*$ver*" -and $_.Extension -in ".exe", ".blockmap") -or $_.Name -eq "latest.yml"
+  }
+  $artifacts | ForEach-Object { Copy-Item $_.FullName $deliver -Force }
 
   $feed = Join-Path $desktop "feed"
   if (Test-Path $feed) { Remove-Item $feed -Recurse -Force }
   New-Item -ItemType Directory -Force -Path $feed | Out-Null
-  Get-ChildItem $outDir -File | Where-Object { $_.Extension -in ".exe", ".yml", ".blockmap" } |
-    ForEach-Object { Copy-Item $_.FullName $feed -Force }
+  $artifacts | ForEach-Object { Copy-Item $_.FullName $feed -Force }
 
   if ($mirrorPy) { Stop-Process -Id $mirrorPy.Id -Force -ErrorAction SilentlyContinue }
 
-  $setup = Get-ChildItem $outDir -Filter "*.exe" | Select-Object -First 1
+  $setup = Get-ChildItem $outDir -Filter "VideoTranslate-Setup-$ver.exe" | Select-Object -First 1
+  if (-not $setup) { throw "未找到产物 VideoTranslate-Setup-$ver.exe" }
   $sizeMb = [math]::Round($setup.Length / 1MB)
+  if ($sizeMb -lt 50) { throw "安装包仅 ${sizeMb}MB，疑似损坏（健康包应约 1200MB），中止交付" }
   Write-Host "`n✅ 打包成功" -ForegroundColor Green
   Write-Host "安装包：$($setup.FullName)  (${sizeMb} MB)"
   Write-Host "D 盘交付：$deliver"

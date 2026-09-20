@@ -1,7 +1,7 @@
 {
   "name": "video-translate-studio",
   "productName": "视频快译",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "description": "英文课堂视频 → 双语字幕 · AI 笔记 · 复习词表（本地优先）",
   "main": "main.cjs",
