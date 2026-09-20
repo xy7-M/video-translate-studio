@@ -1,0 +1,110 @@
+# 视频快译 · macOS 打包 CI
+# 触发：本机只打 Windows 包（便携 Python/ffmpeg 依赖是 win32）；
+#       macOS 包借 GitHub Actions 的 macos-latest runner 产出 dmg。
+# 用法：打 release tag（如 v0.1.3）或手动 workflow_dispatch。
+name: build-macos
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "版本号（如 0.1.3；留空则沿用 desktop/package.json）"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    env:
+      # faster-whisper small 模型 ≈ 500MB，走镜像加速避免 CI 超时
+      HF_ENDPOINT: "https://hf-mirror.com"
+      HF_HUB_DISABLE_XET: "1"
+      ELECTRON_MIRROR: "https://npmmirror.com/mirrors/electron/"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # ──────────────── 1. 便携 Python venv（macOS arm64 体系） ────────────────
+      - name: Create portable Python venv
+        run: |
+          set -e
+          PY_DIR="desktop/runtime/python"
+          rm -rf "$PY_DIR"
+          python3.11 -m venv "$PY_DIR"
+          "$PY_DIR/bin/python" -m pip install --upgrade pip
+          "$PY_DIR/bin/python" -m pip install \
+            faster-whisper ctranslate2 onnxruntime av tokenizers numpy \
+            -i https://pypi.tuna.tsinghua.edu.cn/simple
+          "$PY_DIR/bin/python" -c "import faster_whisper, ctranslate2, onnxruntime, av; print('mac python deps ok')"
+
+      # ──────────────── 2. 静态 ffmpeg（evermeet.cx 官方 mac 静态构建） ────────────────
+      - name: Download static ffmpeg for macOS
+        run: |
+          set -e
+          FF_DIR="desktop/runtime/ffmpeg"
+          mkdir -p "$FF_DIR"
+          curl -L -o /tmp/ff.zip "https://evermeet.cx/ffmpeg/ffmpeg-7.1.zip"
+          curl -L -o /tmp/ffprobe.zip "https://evermeet.cx/ffmpeg/ffprobe-7.1.zip"
+          unzip -o /tmp/ff.zip -d "$FF_DIR"
+          unzip -o /tmp/ffprobe.zip -d "$FF_DIR"
+          chmod +x "$FF_DIR/ffmpeg" "$FF_DIR/ffprobe"
+          "$FF_DIR/ffmpeg" -version | head -1
+          rm -f /tmp/ff.zip /tmp/ffprobe.zip
+
+      # ──────────────── 3. Next standalone 构建 + 组装 .stage ────────────────
+      - name: Build Next standalone
+        run: |
+          set -e
+          cd web
+          npm ci --registry=https://registry.npmmirror.com
+          npm run build
+        env:
+          DEEPSEEK_API_KEY: "placeholder"   # build 期不真正调用，仅占位
+          NEXT_PUBLIC_*: ""
+
+      - name: Assemble .stage
+        run: |
+          set -e
+          mkdir -p desktop/.stage/server desktop/.stage/scripts
+          cp -R web/.next/standalone/* desktop/.stage/server/
+          cp -R web/.next/static desktop/.stage/server/.next/static
+          [ -d web/public ] && cp -R web/public desktop/.stage/server/public || true
+          cp scripts/transcribe.py desktop/.stage/scripts/
+
+      # ──────────────── 4. electron-builder 产出 dmg ────────────────
+      - name: Build macOS DMG
+        run: |
+          set -e
+          cd desktop
+          npm ci --registry=https://registry.npmmirror.com
+          npx electron-builder --mac dmg --x64 --publish never
+          ls -lh dist/*.dmg
+
+      # ──────────────── 5. 上传产物 ────────────────
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VideoTranslate-macOS
+          path: desktop/dist/*.dmg
+          retention-days: 30
