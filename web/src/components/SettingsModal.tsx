@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import {
   Cloud,
   Download,
+  FlaskConical,
   KeyRound,
   RefreshCw,
   Settings,
+  Wallet,
   X,
 } from "lucide-react";
 import type { DesktopUpdateStatus } from "@/desktop";
@@ -29,6 +31,12 @@ export default function SettingsModal() {
   const [licCode, setLicCode] = useState("");
   const [licMsg, setLicMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [licBusy, setLicBusy] = useState(false);
+
+  // 用户自带 API Key 状态
+  const [ownKeyOn, setOwnKeyOn] = useState(false); // 是否已启用自带 Key
+  const [ownKeyInput, setOwnKeyInput] = useState(""); // 输入框值（仅新增/替换时填）
+  const [ownKeyMsg, setOwnKeyMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [ownKeyBusy, setOwnKeyBusy] = useState(false); // 保存 / 测试 中
 
   const desktop = typeof window !== "undefined" ? window.desktop : undefined;
 
@@ -76,6 +84,107 @@ export default function SettingsModal() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, session]);
+
+  // 打开设置时查询自带 Key 状态（不返回 Key 本身）
+  useEffect(() => {
+    if (!open) return;
+    let dead = false;
+    void (async () => {
+      try {
+        const r = await fetch("/api/user-config");
+        const d = (await r.json()) as { hasKey?: boolean; useOwnKey?: boolean };
+        if (!dead) setOwnKeyOn(!!d.useOwnKey);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      dead = true;
+    };
+  }, [open]);
+
+  // 保存 / 替换自带 Key
+  const saveOwnKey = async () => {
+    const k = ownKeyInput.trim();
+    if (k.length < 8) {
+      setOwnKeyMsg({ text: "Key 格式不正确（至少 8 位）", ok: false });
+      return;
+    }
+    setOwnKeyBusy(true);
+    setOwnKeyMsg(null);
+    try {
+      const r = await fetch("/api/user-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "save", apiKey: k }),
+      });
+      const d = (await r.json()) as { ok?: boolean; error?: string };
+      if (d.ok) {
+        setOwnKeyOn(true);
+        setOwnKeyInput("");
+        setOwnKeyMsg({ text: "已保存并启用，之后 AI 调用走你自己的 Key 与额度", ok: true });
+      } else {
+        setOwnKeyMsg({ text: d.error || "保存失败", ok: false });
+      }
+    } catch {
+      setOwnKeyMsg({ text: "网络异常，保存失败", ok: false });
+    } finally {
+      setOwnKeyBusy(false);
+    }
+  };
+
+  // 测试自带 Key 是否可用（用 1 token 探活，不消耗配额）
+  const testOwnKey = async () => {
+    setOwnKeyBusy(true);
+    setOwnKeyMsg(null);
+    try {
+      const r = await fetch("/api/user-config/test", { method: "POST" });
+      const d = (await r.json()) as { ok?: boolean; error?: string; echo?: string };
+      if (d.ok) {
+        setOwnKeyMsg({ text: `Key 可用 ✓（DeepSeek 回复：${d.echo || "ok"}）`, ok: true });
+      } else {
+        setOwnKeyMsg({ text: d.error || "测试失败", ok: false });
+      }
+    } catch {
+      setOwnKeyMsg({ text: "网络异常，测试失败", ok: false });
+    } finally {
+      setOwnKeyBusy(false);
+    }
+  };
+
+  // 关闭自带 Key 模式（回退到应用共享 Key + 激活码门禁）
+  const disableOwnKey = async () => {
+    setOwnKeyBusy(true);
+    try {
+      await fetch("/api/user-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "disable" }),
+      });
+      setOwnKeyOn(false);
+      setOwnKeyMsg({ text: "已切回应用共享 AI 服务", ok: true });
+    } catch {
+      setOwnKeyMsg({ text: "网络异常", ok: false });
+    } finally {
+      setOwnKeyBusy(false);
+    }
+  };
+
+  // 彻底清除自带 Key
+  const clearOwnKey = async () => {
+    if (!confirm("确认清除自带的 DeepSeek API Key？清除后将回退到应用共享 AI 服务。")) return;
+    setOwnKeyBusy(true);
+    try {
+      await fetch("/api/user-config", { method: "DELETE" });
+      setOwnKeyOn(false);
+      setOwnKeyInput("");
+      setOwnKeyMsg({ text: "已清除", ok: true });
+    } catch {
+      setOwnKeyMsg({ text: "网络异常", ok: false });
+    } finally {
+      setOwnKeyBusy(false);
+    }
+  };
 
   const redeem = async () => {
     if (!session) {
@@ -172,10 +281,119 @@ export default function SettingsModal() {
               <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest inline-flex items-center gap-1.5">
                 <Cloud size={13} strokeWidth={1.75} /> AI 服务
               </p>
-              <p className="text-sm text-[var(--ok)]">已连接云端翻译服务 ✓</p>
+              <p className="text-sm text-[var(--ok)]">
+                {ownKeyOn ? "正在使用你自己的 DeepSeek API Key" : "已连接云端翻译服务 ✓"}
+              </p>
               <p className="text-xs text-[var(--muted)] leading-relaxed">
-                翻译、标点校对与课堂笔记由登录账号统一提供，无需配置任何 API 密钥。
-                视频转写与全部数据仍保存在本机，视频不出本机。
+                {ownKeyOn
+                  ? "AI 调用直接走你的 DeepSeek 账户额度，不经应用共享服务。建议在 DeepSeek 平台设置消费上限 100 元。"
+                  : "翻译、标点校对与课堂笔记由登录账号统一提供，无需配置任何 API 密钥。视频转写与全部数据仍保存在本机，视频不出本机。"}
+              </p>
+            </section>
+
+            {/* 导入自己 API：用户自带 DeepSeek Key，花自己的钱 */}
+            <section className="space-y-3 border-t border-dashed border-[var(--line)] pt-5">
+              <div className="flex items-center justify-between">
+                <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest inline-flex items-center gap-1.5">
+                  <Wallet size={13} strokeWidth={1.75} /> 导入自己 API
+                </p>
+                <span
+                  className="text-[11px] mono px-2 py-0.5 rounded-full"
+                  style={{
+                    border: "1.5px solid var(--line)",
+                    color: ownKeyOn ? "var(--ok)" : "var(--muted)",
+                  }}
+                >
+                  {ownKeyOn ? "自有 Key · 计费中" : "未启用"}
+                </span>
+              </div>
+
+              <p className="text-xs text-[var(--muted)] leading-relaxed">
+                填入你自己的 DeepSeek API Key，AI 调用（翻译 / 笔记 / 问答）将直接走你的账户额度，
+                不再消耗应用共享配额，也无需激活码。去
+                <a
+                  href="https://platform.deepseek.com/api-keys"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[var(--accent)] underline ml-0.5"
+                >
+                  DeepSeek 平台
+                </a>
+                申请 Key，建议同时设置消费上限 100 元。
+              </p>
+
+              {ownKeyOn ? (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      className="btn-ghost text-xs whitespace-nowrap"
+                      onClick={testOwnKey}
+                      disabled={ownKeyBusy}
+                    >
+                      <FlaskConical {...ic} /> {ownKeyBusy ? "测试中…" : "测试 Key"}
+                    </button>
+                    <button
+                      className="btn-ghost text-xs whitespace-nowrap"
+                      onClick={disableOwnKey}
+                      disabled={ownKeyBusy}
+                    >
+                      切回共享服务
+                    </button>
+                    <button
+                      className="btn-ghost text-xs whitespace-nowrap"
+                      onClick={clearOwnKey}
+                      disabled={ownKeyBusy}
+                      style={{ color: "var(--err)" }}
+                    >
+                      彻底清除
+                    </button>
+                  </div>
+                  {/* 替换为新 Key 的输入框（可选） */}
+                  <details className="text-xs">
+                    <summary className="cursor-pointer text-[var(--muted)] select-none">替换为新 Key</summary>
+                    <div className="mt-2 flex gap-2">
+                      <input
+                        type="password"
+                        value={ownKeyInput}
+                        onChange={(e) => setOwnKeyInput(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && saveOwnKey()}
+                        placeholder="粘贴新的 DeepSeek API Key"
+                        maxLength={120}
+                        className="flex-1 min-w-0 bg-transparent border border-[var(--line)] rounded-full px-4 py-2 text-sm mono tracking-wider outline-none focus:border-[var(--accent)] transition-colors duration-150"
+                      />
+                      <button className="btn-primary whitespace-nowrap" onClick={saveOwnKey} disabled={ownKeyBusy}>
+                        替换
+                      </button>
+                    </div>
+                  </details>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={ownKeyInput}
+                    onChange={(e) => setOwnKeyInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && saveOwnKey()}
+                    placeholder="sk-开头的 DeepSeek API Key"
+                    maxLength={120}
+                    aria-label="DeepSeek API Key"
+                    className="flex-1 min-w-0 bg-transparent border border-[var(--line)] rounded-full px-4 py-2 text-sm mono tracking-wider outline-none focus:border-[var(--accent)] transition-colors duration-150"
+                  />
+                  <button className="btn-primary whitespace-nowrap" onClick={saveOwnKey} disabled={ownKeyBusy}>
+                    {ownKeyBusy ? "保存中…" : "保存并启用"}
+                  </button>
+                </div>
+              )}
+
+              {ownKeyMsg && (
+                <p className="text-xs" style={{ color: ownKeyMsg.ok ? "var(--ok)" : "var(--err)" }}>
+                  {ownKeyMsg.text}
+                </p>
+              )}
+
+              <p className="text-[11px] text-[var(--muted)] leading-relaxed">
+                Key 只存在这台电脑的 <code className="mono">user-config.json</code>，
+                不进浏览器 localStorage、不上传任何服务器、不入 git。
               </p>
             </section>
 
