@@ -1,1 +1,110 @@
-IyDop4bpopHlv6vor5EgwrcgbWFjT1Mg5omT5YyFIENJDQojIOinpuWPke+8muacrOacuuWPquaJkyBXaW5kb3dzIOWMhe+8iOS+v+aQuiBQeXRob24vZmZtcGVnIOS+nei1luaYryB3aW4zMu+8ie+8mw0KIyAgICAgICBtYWNPUyDljIXlgJ8gR2l0SHViIEFjdGlvbnMg55qEIG1hY29zLWxhdGVzdCBydW5uZXIg5Lqn5Ye6IGRtZ+OAgg0KIyDnlKjms5XvvJrmiZMgcmVsZWFzZSB0YWfvvIjlpoIgdjAuMS4z77yJ5oiW5omL5YqoIHdvcmtmbG93X2Rpc3BhdGNo44CCDQpuYW1lOiBidWlsZC1tYWNvcw0KDQpvbjoNCiAgcHVzaDoNCiAgICB0YWdzOg0KICAgICAgLSAidioiDQogIHdvcmtmbG93X2Rpc3BhdGNoOg0KICAgIGlucHV0czoNCiAgICAgIHZlcnNpb246DQogICAgICAgIGRlc2NyaXB0aW9uOiAi54mI5pys5Y+377yI5aaCIDAuMS4z77yb55WZ56m65YiZ5rK/55SoIGRlc2t0b3AvcGFja2FnZS5qc29u77yJIg0KICAgICAgICByZXF1aXJlZDogZmFsc2UNCiAgICAgICAgZGVmYXVsdDogIiINCg0KcGVybWlzc2lvbnM6DQogIGNvbnRlbnRzOiByZWFkDQoNCmpvYnM6DQogIGJ1aWxkLW1hY29zOg0KICAgIHJ1bnMtb246IG1hY29zLWxhdGVzdA0KICAgIHRpbWVvdXQtbWludXRlczogNjANCg0KICAgIGVudjoNCiAgICAgICMgZmFzdGVyLXdoaXNwZXIgc21hbGwg5qih5Z6LIOKJiCA1MDBNQu+8jOi1sOmVnOWDj+WKoOmAn+mBv+WFjSBDSSDotoXml7YNCiAgICAgIEhGX0VORFBPSU5UOiAiaHR0cHM6Ly9oZi1taXJyb3IuY29tIg0KICAgICAgSEZfSFVCX0RJU0FCTEVfWEVUOiAiMSINCiAgICAgIEVMRUNUUk9OX01JUlJPUjogImh0dHBzOi8vbnBtbWlycm9yLmNvbS9taXJyb3JzL2VsZWN0cm9uLyINCg0KICAgIHN0ZXBzOg0KICAgICAgLSB1c2VzOiBhY3Rpb25zL2NoZWNrb3V0QHY0DQoNCiAgICAgIC0gbmFtZTogU2V0dXAgTm9kZSAyMg0KICAgICAgICB1c2VzOiBhY3Rpb25zL3NldHVwLW5vZGVAdjQNCiAgICAgICAgd2l0aDoNCiAgICAgICAgICBub2RlLXZlcnNpb246IDIyDQogICAgICAgICAgY2FjaGU6IG5wbQ0KICAgICAgICAgIGNhY2hlLWRlcGVuZGVuY3ktcGF0aDogd2ViL3BhY2thZ2UtbG9jay5qc29uDQoNCiAgICAgIC0gbmFtZTogU2V0dXAgUHl0aG9uIDMuMTENCiAgICAgICAgdXNlczogYWN0aW9ucy9zZXR1cC1weXRob25AdjUNCiAgICAgICAgd2l0aDoNCiAgICAgICAgICBweXRob24tdmVyc2lvbjogIjMuMTEiDQoNCiAgICAgICMg4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSAIDEuIOS+v+aQuiBQeXRob24gdmVudu+8iG1hY09TIGFybTY0IOS9k+ezu++8iSDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIANCiAgICAgIC0gbmFtZTogQ3JlYXRlIHBvcnRhYmxlIFB5dGhvbiB2ZW52DQogICAgICAgIHJ1bjogfA0KICAgICAgICAgIHNldCAtZQ0KICAgICAgICAgIFBZX0RJUj0iZGVza3RvcC9ydW50aW1lL3B5dGhvbiINCiAgICAgICAgICBybSAtcmYgIiRQWV9ESVIiDQogICAgICAgICAgcHl0aG9uMy4xMSAtbSB2ZW52ICIkUFlfRElSIg0KICAgICAgICAgICIkUFlfRElSL2Jpbi9weXRob24iIC1tIHBpcCBpbnN0YWxsIC0tdXBncmFkZSBwaXANCiAgICAgICAgICAiJFBZX0RJUi9iaW4vcHl0aG9uIiAtbSBwaXAgaW5zdGFsbCBcDQogICAgICAgICAgICBmYXN0ZXItd2hpc3BlciBjdHJhbnNsYXRlMiBvbm54cnVudGltZSBhdiB0b2tlbml6ZXJzIG51bXB5IFwNCiAgICAgICAgICAgIC1pIGh0dHBzOi8vcHlwaS50dW5hLnRzaW5naHVhLmVkdS5jbi9zaW1wbGUNCiAgICAgICAgICAiJFBZX0RJUi9iaW4vcHl0aG9uIiAtYyAiaW1wb3J0IGZhc3Rlcl93aGlzcGVyLCBjdHJhbnNsYXRlMiwgb25ueHJ1bnRpbWUsIGF2OyBwcmludCgnbWFjIHB5dGhvbiBkZXBzIG9rJykiDQoNCiAgICAgICMg4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSAIDIuIOmdmeaAgSBmZm1wZWfvvIhldmVybWVldC5jeCDlrpjmlrkgbWFjIOmdmeaAgeaehOW7uu+8iSDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIANCiAgICAgIC0gbmFtZTogRG93bmxvYWQgc3RhdGljIGZmbXBlZyBmb3IgbWFjT1MNCiAgICAgICAgcnVuOiB8DQogICAgICAgICAgc2V0IC1lDQogICAgICAgICAgRkZfRElSPSJkZXNrdG9wL3J1bnRpbWUvZmZtcGVnIg0KICAgICAgICAgIG1rZGlyIC1wICIkRkZfRElSIg0KICAgICAgICAgIGN1cmwgLUwgLW8gL3RtcC9mZi56aXAgImh0dHBzOi8vZXZlcm1lZXQuY3gvZmZtcGVnL2ZmbXBlZy03LjEuemlwIg0KICAgICAgICAgIGN1cmwgLUwgLW8gL3RtcC9mZnByb2JlLnppcCAiaHR0cHM6Ly9ldmVybWVldC5jeC9mZm1wZWcvZmZwcm9iZS03LjEuemlwIg0KICAgICAgICAgIHVuemlwIC1vIC90bXAvZmYuemlwIC1kICIkRkZfRElSIg0KICAgICAgICAgIHVuemlwIC1vIC90bXAvZmZwcm9iZS56aXAgLWQgIiRGRl9ESVIiDQogICAgICAgICAgY2htb2QgK3ggIiRGRl9ESVIvZmZtcGVnIiAiJEZGX0RJUi9mZnByb2JlIg0KICAgICAgICAgICIkRkZfRElSL2ZmbXBlZyIgLXZlcnNpb24gfCBoZWFkIC0xDQogICAgICAgICAgcm0gLWYgL3RtcC9mZi56aXAgL3RtcC9mZnByb2JlLnppcA0KDQogICAgICAjIOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgCAzLiBOZXh0IHN0YW5kYWxvbmUg5p6E5bu6ICsg57uE6KOFIC5zdGFnZSDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIANCiAgICAgIC0gbmFtZTogQnVpbGQgTmV4dCBzdGFuZGFsb25lDQogICAgICAgIHJ1bjogfA0KICAgICAgICAgIHNldCAtZQ0KICAgICAgICAgIGNkIHdlYg0KICAgICAgICAgIG5wbSBjaSAtLXJlZ2lzdHJ5PWh0dHBzOi8vcmVnaXN0cnkubnBtbWlycm9yLmNvbQ0KICAgICAgICAgIG5wbSBydW4gYnVpbGQNCiAgICAgICAgZW52Og0KICAgICAgICAgIERFRVBTRUVLX0FQSV9LRVk6ICJwbGFjZWhvbGRlciIgICAjIGJ1aWxkIOacn+S4jeecn+ato+iwg+eUqO+8jOS7heWNoOS9jQ0KICAgICAgICAgIE5FWFRfUFVCTElDXyo6ICIiDQoNCiAgICAgIC0gbmFtZTogQXNzZW1ibGUgLnN0YWdlDQogICAgICAgIHJ1bjogfA0KICAgICAgICAgIHNldCAtZQ0KICAgICAgICAgIG1rZGlyIC1wIGRlc2t0b3AvLnN0YWdlL3NlcnZlciBkZXNrdG9wLy5zdGFnZS9zY3JpcHRzDQogICAgICAgICAgY3AgLVIgd2ViLy5uZXh0L3N0YW5kYWxvbmUvKiBkZXNrdG9wLy5zdGFnZS9zZXJ2ZXIvDQogICAgICAgICAgY3AgLVIgd2ViLy5uZXh0L3N0YXRpYyBkZXNrdG9wLy5zdGFnZS9zZXJ2ZXIvLm5leHQvc3RhdGljDQogICAgICAgICAgWyAtZCB3ZWIvcHVibGljIF0gJiYgY3AgLVIgd2ViL3B1YmxpYyBkZXNrdG9wLy5zdGFnZS9zZXJ2ZXIvcHVibGljIHx8IHRydWUNCiAgICAgICAgICBjcCBzY3JpcHRzL3RyYW5zY3JpYmUucHkgZGVza3RvcC8uc3RhZ2Uvc2NyaXB0cy8NCg0KICAgICAgIyDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIAgNC4gZWxlY3Ryb24tYnVpbGRlciDkuqflh7ogZG1nIOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgA0KICAgICAgLSBuYW1lOiBCdWlsZCBtYWNPUyBETUcNCiAgICAgICAgcnVuOiB8DQogICAgICAgICAgc2V0IC1lDQogICAgICAgICAgY2QgZGVza3RvcA0KICAgICAgICAgIG5wbSBjaSAtLXJlZ2lzdHJ5PWh0dHBzOi8vcmVnaXN0cnkubnBtbWlycm9yLmNvbQ0KICAgICAgICAgIG5weCBlbGVjdHJvbi1idWlsZGVyIC0tbWFjIGRtZyAtLXg2NCAtLXB1Ymxpc2ggbmV2ZXINCiAgICAgICAgICBscyAtbGggZGlzdC8qLmRtZw0KDQogICAgICAjIOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgCA1LiDkuIrkvKDkuqfniakg4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSADQogICAgICAtIG5hbWU6IFVwbG9hZCBETUcgYXJ0aWZhY3QNCiAgICAgICAgdXNlczogYWN0aW9ucy91cGxvYWQtYXJ0aWZhY3RAdjQNCiAgICAgICAgd2l0aDoNCiAgICAgICAgICBuYW1lOiBWaWRlb1RyYW5zbGF0ZS1tYWNPUw0KICAgICAgICAgIHBhdGg6IGRlc2t0b3AvZGlzdC8qLmRtZw0KICAgICAgICAgIHJldGVudGlvbi1kYXlzOiAzMA0K
+# 视频快译 · macOS 打包 CI
+# 触发：本机只打 Windows 包（便携 Python/ffmpeg 依赖是 win32）；
+#       macOS 包借 GitHub Actions 的 macos-latest runner 产出 dmg。
+# 用法：打 release tag（如 v0.1.3）或手动 workflow_dispatch。
+name: build-macos
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "版本号（如 0.1.3；留空则沿用 desktop/package.json）"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    env:
+      # faster-whisper small 模型 ≈ 500MB，走镜像加速避免 CI 超时
+      HF_ENDPOINT: "https://hf-mirror.com"
+      HF_HUB_DISABLE_XET: "1"
+      ELECTRON_MIRROR: "https://npmmirror.com/mirrors/electron/"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # ──────────────── 1. 便携 Python venv ────────────────
+      - name: Create portable Python venv
+        run: |
+          set -e
+          PY_DIR="desktop/runtime/python"
+          rm -rf "$PY_DIR"
+          python3.11 -m venv "$PY_DIR"
+          "$PY_DIR/bin/python" -m pip install --upgrade pip
+          "$PY_DIR/bin/python" -m pip install \
+            faster-whisper ctranslate2 onnxruntime av tokenizers numpy \
+            -i https://pypi.tuna.tsinghua.edu.cn/simple
+          "$PY_DIR/bin/python" -c "import faster_whisper, ctranslate2, onnxruntime, av; print('mac python deps ok')"
+
+      # ──────────────── 2. 静态 ffmpeg（evermeet.cx 官方 mac 静态构建） ────────────────
+      - name: Download static ffmpeg for macOS
+        run: |
+          set -e
+          FF_DIR="desktop/runtime/ffmpeg"
+          mkdir -p "$FF_DIR"
+          curl -L -o /tmp/ff.zip "https://evermeet.cx/ffmpeg/ffmpeg-7.1.zip"
+          curl -L -o /tmp/ffprobe.zip "https://evermeet.cx/ffmpeg/ffprobe-7.1.zip"
+          unzip -o /tmp/ff.zip -d "$FF_DIR"
+          unzip -o /tmp/ffprobe.zip -d "$FF_DIR"
+          chmod +x "$FF_DIR/ffmpeg" "$FF_DIR/ffprobe"
+          "$FF_DIR/ffmpeg" -version | head -1
+          rm -f /tmp/ff.zip /tmp/ffprobe.zip
+
+      # ──────────────── 3. Next standalone 构建 + 组装 .stage ────────────────
+      - name: Build Next standalone
+        run: |
+          set -e
+          cd web
+          npm ci --registry=https://registry.npmmirror.com
+          npm run build
+        env:
+          DEEPSEEK_API_KEY: "placeholder"   # build 期不真正调用，仅占位
+
+      # ──────────────── 4. 组装 .stage ────────────────
+      - name: Assemble .stage
+        run: |
+          set -e
+          mkdir -p desktop/.stage/server desktop/.stage/scripts
+          cp -R web/.next/standalone/* desktop/.stage/server/
+          mkdir -p desktop/.stage/server/.next
+          cp -R web/.next/static desktop/.stage/server/.next/static
+          [ -d web/public ] && cp -R web/public desktop/.stage/server/public || true
+          cp scripts/transcribe.py desktop/.stage/scripts/
+
+      # ──────────────── 5. electron-builder 产出 dmg ────────────────
+      - name: Build macOS DMG
+        run: |
+          set -e
+          cd desktop
+          npm ci --registry=https://registry.npmmirror.com
+          npx electron-builder --mac dmg --x64 --publish never
+          ls -lh dist/*.dmg
+
+      # ──────────────── 6. 上传产物 ────────────────
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VideoTranslate-macOS
+          path: desktop/dist/*.dmg
+          retention-days: 30
