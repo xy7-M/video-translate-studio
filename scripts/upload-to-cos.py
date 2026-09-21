@@ -20,7 +20,7 @@ from pathlib import Path
 CREDENTIALS_FILE = r"C:\Users\12653\.secrets\tencent-cloud\credentials.env"
 
 # 默认值（用户可改）—— 桶名必须全局唯一，建议包含 com-mengxiaoyao 前缀
-DEFAULT_BUCKET = "mengxiaoyao-vts-1300000000"  # ← 用户需替换 APPID 后缀
+DEFAULT_BUCKET = "mengxiaoyao-vts-1455284621"  # 2026-09-21 控制台已建桶（公有读私有写）
 DEFAULT_REGION = "ap-beijing"                  # 北京（cmcc 内地访问快）
 DEFAULT_CDN_DOMAIN = ""  # 若已绑定 CDN 加速域名，填这里；空则返回 cos 直接 URL
 
