@@ -93,18 +93,19 @@ jobs:
           cp scripts/transcribe.py desktop/.stage/scripts/
 
       # ──────────────── 5. electron-builder 产出 dmg ────────────────
+      # 注意：electron-builder.yml 里 output 是 dist/${version}，dmg 落在 dist/0.1.x/ 子目录
       - name: Build macOS DMG
         run: |
           set -e
           cd desktop
           npm ci --registry=https://registry.npmmirror.com
           npx electron-builder --mac dmg --x64 --publish never
-          ls -lh dist/*.dmg
+          find dist -name "*.dmg" -exec ls -lh {} \;
 
-      # ──────────────── 6. 上传产物 ────────────────
+      # ──────────────── 6. 上传产物（递归匹配版本子目录） ────────────────
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
         with:
           name: VideoTranslate-macOS
-          path: desktop/dist/*.dmg
+          path: desktop/dist/**/*.dmg
           retention-days: 30
