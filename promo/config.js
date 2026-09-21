@@ -2,7 +2,6 @@
 window.PROMO_CONFIG = {
   version: "0.1.3",
   fileName: "VideoTranslate-Setup-0.1.3.exe",
-  // 腾讯云 COS 公有读直链示例（建桶上传后填入）：
-  // downloadUrl: "https://video-translate-release-1300000000.cos.ap-nanjing.myqcloud.com/VideoTranslate-Setup-0.1.3.exe"
-  downloadUrl: ""
+  // 腾讯云 COS 公有读直链（2026-09-21 上传，北京区）
+  downloadUrl: "https://mengxiaoyao-vts-1455284621.cos.ap-beijing.myqcloud.com/VideoTranslate-Setup-0.1.3.exe"
 };
