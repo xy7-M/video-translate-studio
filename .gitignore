@@ -34,3 +34,6 @@ image-cards/
 .trae/
 .vscode/
 .idea/
+
+# 浏览器 QA 截图（本地临时产物）
+qa-shots/
