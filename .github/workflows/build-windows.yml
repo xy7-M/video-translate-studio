@@ -1,0 +1,115 @@
+# 视频快译 · Windows 打包 CI（实验性）
+# 状态：未验证。本地 release.ps1 才是当前可信发布链路；本工作流是「两者都要」的第二阶段，
+#       仅 workflow_dispatch 手动触发（避免 tag push 白烧私有仓库双倍分钟数）。
+# 已知待调试点（首跑大概率要修几轮）：
+#   1) CUDA 运行时：ctranslate2 GPU 版需 cuBLAS/cuDNN DLL，靠 pip 的 nvidia-*-cu12 包补齐，
+#      是否真的被 transcribe.py 找到待实测（本地是靠整目录复制 pyenv 解决的）
+#   2) build.ps1 里 winCodeSign 重打包 + app-builder.exe 二进制补丁能否在 runner 上原样跑通
+#   3) 1.3GB 产物从美国机房上传 ap-beijing COS 的速度/稳定性
+# 需要的仓库 Secrets：TENCENT_SECRET_ID / TENCENT_SECRET_KEY（仅 COS 权限的子账号密钥）
+name: build-windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_cos:
+        description: "构建后是否上传 COS feed/（true/false）"
+        required: false
+        default: "false"
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 120
+
+    env:
+      ELECTRON_MIRROR: "https://npmmirror.com/mirrors/electron/"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # 便携 Python：复制 setup-python 的完整解释器目录，再叠加 pip 依赖（对齐本地 prepare-runtime.ps1 思路）
+      - name: Assemble portable Python runtime
+        shell: pwsh
+        run: |
+          $pyDir = "desktop/runtime/python"
+          $base = (python -c "import sys; print(sys.base_prefix)")
+          robocopy $base $pyDir /E /XD __pycache__ test tests tcl tkinter Tools lib2to3 /XF *.pyc *.pdb *.chm /NFL /NDL /NJH /NJS /NP
+          & "$pyDir/python.exe" -m pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple
+          & "$pyDir/python.exe" -m pip install faster-whisper ctranslate2 onnxruntime av tokenizers numpy nvidia-cublas-cu12 nvidia-cudnn-cu12 -i https://pypi.tuna.tsinghua.edu.cn/simple
+          & "$pyDir/python.exe" -c "import faster_whisper, ctranslate2; print('win python deps ok')"
+
+      - name: Download static ffmpeg for Windows
+        shell: pwsh
+        run: |
+          $ffDir = "desktop/runtime/ffmpeg"
+          New-Item -ItemType Directory -Force -Path $ffDir | Out-Null
+          Invoke-WebRequest "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile "$env:TEMP/ff.zip" -UseBasicParsing
+          Expand-Archive "$env:TEMP/ff.zip" -DestinationPath "$env:TEMP/ff"
+          $bin = Get-ChildItem "$env:TEMP/ff" -Recurse -Filter ffmpeg.exe | Select-Object -First 1
+          Copy-Item $bin.FullName $ffDir
+          Copy-Item (Join-Path $bin.DirectoryName "ffprobe.exe") $ffDir
+          & "$ffDir/ffmpeg.exe" -version | Select-Object -First 1
+
+      - name: Build Next standalone
+        shell: pwsh
+        working-directory: web
+        env:
+          DEEPSEEK_API_KEY: "placeholder"
+        run: |
+          npm ci --registry=https://registry.npmmirror.com
+          npm run build
+
+      - name: Assemble .stage
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path desktop/.stage/server, desktop/.stage/scripts | Out-Null
+          Copy-Item -Recurse web/.next/standalone/* desktop/.stage/server/
+          Copy-Item -Recurse web/.next/static desktop/.stage/server/.next/static
+          if (Test-Path web/public) { Copy-Item -Recurse web/public desktop/.stage/server/public }
+          Copy-Item scripts/transcribe.py desktop/.stage/scripts/
+
+      # 打包：直接复用本地 build.ps1 的第 4-6 步逻辑（NSIS 镜像 + winCodeSign 补丁）
+      # 首跑若在这步炸，优先看 winCodeSign 补丁与 8899 本地镜像
+      - name: electron-builder NSIS
+        shell: pwsh
+        run: |
+          cd desktop
+          npm ci --registry=https://registry.npmmirror.com
+          # 输出目录：runner 上没有 D:\vts-build 约定，用默认 dist/${version}
+          npx electron-builder --win nsis --x64 --publish never
+          Get-ChildItem dist -Recurse -Filter *.exe | Select-Object FullName, Length
+
+      - name: Upload NSIS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VideoTranslate-Windows
+          path: desktop/dist/**/*.exe
+          retention-days: 14
+
+      - name: Upload to COS feed/ (opt-in)
+        if: inputs.upload_cos == 'true'
+        shell: pwsh
+        env:
+          TENCENT_SECRET_ID: ${{ secrets.TENCENT_SECRET_ID }}
+          TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }}
+        run: |
+          pip install cos-python-sdk-v5 -i https://pypi.tuna.tsinghua.edu.cn/simple
+          # 凭证不落盘到仓库：写 runner 临时目录，脚本支持的路径固定为 C:\Users\12653\...，
+          # 因此这里改用内联上传而非复用 upload-to-cos.py（首跑调通后再收敛）
+          Write-Host "TODO: 首跑先只验证 artifact，上传步骤调通后再启用"
