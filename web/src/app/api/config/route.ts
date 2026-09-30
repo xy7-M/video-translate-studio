@@ -1,14 +1,15 @@
 /**
- * 本地配置：AI 服务已由 Supabase 云代理统一提供，用户不再需要（也不能）自带 DeepSeek 密钥。
- * 这里仅保留只读的服务信息，供设置面板展示。
+ * 本地只读配置：AI 为强制 BYO-Key——这里返回当前是否已配置用户自己的
+ * DeepSeek Key，供界面展示真实可用状态。
  */
 import { NextResponse } from "next/server";
+import { hasOwnKey } from "@/lib/user-config";
 
 export const runtime = "nodejs";
 
 export async function GET() {
   return NextResponse.json({
-    aiProvider: "supabase-proxy",
-    hasKey: true, // 密钥由服务端 Edge Function 持有，始终可用
+    aiProvider: "deepseek-byok",
+    hasKey: hasOwnKey(),
   });
 }

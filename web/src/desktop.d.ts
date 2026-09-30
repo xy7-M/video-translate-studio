@@ -14,8 +14,6 @@ export type DesktopInfo = {
 
 export interface DesktopBridge {
   getInfo: () => Promise<DesktopInfo>;
-  /** 本机设备指纹（激活码绑定用，仅硬件摘要哈希，不含个人数据） */
-  getDeviceId: () => Promise<string>;
   checkUpdates: () => Promise<{ ok: boolean; message?: string }>;
   restartToUpdate: () => void;
   setFeedUrl: (url: string) => Promise<{ ok: boolean }>;

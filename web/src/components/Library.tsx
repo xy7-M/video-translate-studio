@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BookOpen, MessageCircle, Search, Trash2 } from "lucide-react";
 import { authedFetch } from "@/lib/supabase";
+import { ensureApiKey } from "@/lib/ensure-api-key";
 import { useAuth } from "@/lib/auth-context";
 
 const tabIc = { size: 14, strokeWidth: 1.75, className: "shrink-0" } as const;
@@ -169,6 +170,7 @@ export default function Library({
       openLogin();
       return;
     }
+    if (!(await ensureApiKey())) return; // 未配置自有 Key：拦截并唤起配置弹窗
     setQuestion("");
     setMsgs((m) => [...m, { role: "user", text }]);
     setAsking(true);

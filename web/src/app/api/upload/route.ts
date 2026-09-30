@@ -4,7 +4,7 @@ import { Readable } from "stream";
 import { pipeline as streamPipeline } from "stream/promises";
 import { NextResponse } from "next/server";
 import { UPLOAD_DIR, newTask, deleteTask, updateTask, runPipeline, probeDuration, MAX_DURATION_SEC, uniqueTitle } from "@/lib/pipeline";
-import { captureToken } from "@/lib/session";
+import { hasOwnKey } from "@/lib/user-config";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -13,7 +13,13 @@ const ALLOWED = new Set([".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v"]);
 const MAX_BYTES = 2 * 1024 * 1024 * 1024; // 2GB ≈ 2 小时 720p
 
 export async function POST(req: Request) {
-  captureToken(req); // 暂存登录 token，供后台管线的 AI 阶段使用
+  // 严格 BYO-Key：未配置用户自有 Key 一律拦截，且放在收文件之前（免传 2GB 后才失败）
+  if (!hasOwnKey()) {
+    return NextResponse.json(
+      { error: "请先填入你自己的 DeepSeek API Key（设置 → 导入自己 API）", needApiKey: true },
+      { status: 400 },
+    );
+  }
   const form = await req.formData();
   const file = form.get("video");
   if (!(file instanceof File)) {

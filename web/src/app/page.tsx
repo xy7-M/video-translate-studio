@@ -18,6 +18,7 @@ import {
 import Library from "@/components/Library";
 import SettingsModal from "@/components/SettingsModal";
 import { authedFetch } from "@/lib/supabase";
+import { ensureApiKey } from "@/lib/ensure-api-key";
 import { useAuth } from "@/lib/auth-context";
 
 /** 墨线细描边图标：与手账风 1.5px 描边同语言 */
@@ -172,6 +173,8 @@ export default function Home() {
       openLogin();
       return;
     }
+    // 未配置自有 Key：拦截，不开始上传（避免 2GB 传完才在翻译阶段失败）
+    if (!(await ensureApiKey())) return;
     setUploading(true);
     setTask(null);
     setSegs([]);
@@ -236,6 +239,7 @@ export default function Home() {
       openLogin();
       return;
     }
+    if (!(await ensureApiKey())) return; // 未配置自有 Key：拦截并唤起配置弹窗
     const r = await authedFetch(`/api/reprocess/${task.id}`, { method: "POST" }).catch(() => null);
     if (!r?.ok) return;
     poll(task.id);

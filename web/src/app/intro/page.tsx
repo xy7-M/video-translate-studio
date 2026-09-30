@@ -144,7 +144,7 @@ const REQS = [
   {
     icon: <BookOpen {...ic} />,
     k: "AI 功能",
-    v: "激活码解锁 DeepSeek 云端翻译与笔记（按量计费，建议平台侧设消费上限）",
+    v: "使用你自己的 DeepSeek API Key 完成翻译与笔记（按量走你的账户额度，建议设消费上限 100 元）",
   },
 ];
 
@@ -291,7 +291,7 @@ export default function IntroPage() {
         </div>
         <p className="mt-4 flex items-center gap-2 text-sm text-[var(--muted)]">
           <AlertTriangle size={15} strokeWidth={1.75} className="text-[var(--warn)]" />
-          提示：AI 翻译与笔记需要激活码解锁；转写与字幕烧录完全本地、免费。
+          提示：AI 翻译与笔记需要你自己的 DeepSeek API Key（注册后会引导填写）；转写与字幕烧录完全本地、免费。
         </p>
       </section>
 

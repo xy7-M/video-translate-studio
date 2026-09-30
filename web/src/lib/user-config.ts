@@ -6,10 +6,10 @@
  *  - 文件落在用户自己的 AppData 目录，由操作系统文件权限保护（与桌面应用存放凭证的惯例一致）。
  *  - GET /api/user-config 只返回 { hasKey: boolean }，绝不把明文 key 发回浏览器。
  *
- * 当用户启用自带 Key 时：
- *  - deepseek.ts 直接用此 Key 调 DeepSeek，绕过 Supabase Edge Function 代理与许可门禁；
+ * 唯一 AI 路径：
+ *  - deepseek.ts 一律用此 Key 直连 DeepSeek，无 Edge Function 代理、无许可门禁；
  *  - 用户自行承担 DeepSeek 侧计费（建议在 DeepSeek 平台设置消费上限 100 元）。
- * 当未启用时：回退到原 Edge Function 代理路径（应用共享 Key + 激活码门禁 + 每日配额）。
+ * 未配置 Key 时 AI 功能不可用，界面强制引导用户填入。
  */
 import fs from "fs";
 import path from "path";

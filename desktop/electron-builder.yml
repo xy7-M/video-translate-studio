@@ -57,6 +57,7 @@ mac:
   artifactName: VideoTranslate-${version}-macOS.${ext}
 
 # 仅用于生成 latest.yml；真正的 feed 地址由主进程 setFeedURL 控制
+# 与 desktop/main.cjs 的 DEFAULT_FEED 保持一致（COS 公有读对象目录）
 publish:
   - provider: generic
-    url: https://github.com/xy7-M/video-translate-studio-feed/releases/latest/download/
+    url: https://mengxiaoyao-vts-1455284621.cos.ap-beijing.myqcloud.com/feed/

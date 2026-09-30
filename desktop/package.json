@@ -1,9 +1,9 @@
 {
   "name": "video-translate-studio",
-  "productName": "视频快译",
-  "version": "0.1.3",
+  "productName": "瑙嗛蹇瘧",
+  "version": "0.1.4",
   "private": true,
-  "description": "英文课堂视频 → 双语字幕 · AI 笔记 · 复习词表（本地优先）",
+  "description": "鑻辨枃璇惧爞瑙嗛 鈫?鍙岃瀛楀箷 路 AI 绗旇 路 澶嶄範璇嶈〃锛堟湰鍦颁紭鍏堬級",
   "main": "main.cjs",
   "author": "mengxiaoyao",
   "scripts": {

@@ -12,8 +12,6 @@ const path = require("path");
 const fs = require("fs");
 const net = require("net");
 const http = require("http");
-const os = require("os");
-const crypto = require("crypto");
 
 const APP_NAME = "视频快译";
 const DEV_URL = process.env.VTS_DEV_URL || ""; // 开发联调：直接加载已在运行的 next dev
@@ -24,8 +22,9 @@ const CONFIG_FILE = path.join(HOME, "config.json");
 const SERVER_LOG = path.join(USER_DATA, "server.log");
 const APP_LOG = path.join(USER_DATA, "app.log");
 
+// 更新源放在腾讯云 COS（公有读对象），GitHub 私有仓库 Releases 未登录恒 404，不可用
 const DEFAULT_FEED =
-  "https://github.com/xy7-M/video-translate-studio-feed/releases/latest/download/";
+  "https://mengxiaoyao-vts-1455284621.cos.ap-beijing.myqcloud.com/feed/";
 
 fs.mkdirSync(HOME, { recursive: true });
 
@@ -182,7 +181,7 @@ function startServer(port) {
     HF_ENDPOINT: process.env.HF_ENDPOINT || "https://hf-mirror.com",
     HF_HUB_DISABLE_XET: "1",
   });
-  // AI 调用改走 Supabase Edge Function 代理：密钥只存在于云端 secret，本机不再注入 DeepSeek key
+  // 强制 BYO-Key：不注入任何 DeepSeek key；用户在应用界面填入自己的 Key，存于本机 .data/user-config.json
 
   const out = fs.openSync(SERVER_LOG, "w");
   serverProc = spawn(process.execPath, [serverJs], {
@@ -365,52 +364,12 @@ async function createWindow(url) {
   });
 }
 
-// ───────────────── 设备指纹（激活码绑定用） ─────────────────
-// 优先取 Windows MachineGuid（重装系统前稳定），叠加硬件摘要做哈希；
-// 首次计算后持久化进 config.json，之后即使网卡切换/信息波动也保持不变，避免误判换机。
-let deviceIdCache = "";
-function getDeviceId() {
-  if (deviceIdCache) return deviceIdCache;
-  const saved = readConfig().deviceId;
-  if (saved && String(saved).length >= 16) {
-    deviceIdCache = String(saved);
-    return deviceIdCache;
-  }
-  let machineGuid = "";
-  try {
-    const out = execSync(
-      'reg query "HKLM\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid',
-      { windowsHide: true, timeout: 5000 }
-    ).toString();
-    const m = /MachineGuid\s+REG_SZ\s+(\S+)/i.exec(out);
-    if (m) machineGuid = m[1];
-  } catch {
-    /* 非 Windows 或注册表不可读，走兜底 */
-  }
-  const mac =
-    Object.values(os.networkInterfaces())
-      .flat()
-      .filter((i) => i && i.mac && i.mac !== "00:00:00:00:00:00")
-      .map((i) => i.mac)
-      .sort()[0] || "";
-  const raw = [machineGuid || os.hostname(), mac, os.cpus()[0]?.model || "", os.arch(), String(os.totalmem())].join("|");
-  const id = "dev-" + crypto.createHash("sha256").update(raw).digest("hex").slice(0, 32);
-  deviceIdCache = id;
-  try {
-    writeConfig({ deviceId: id });
-  } catch {
-    /* 写失败不影响本次使用 */
-  }
-  return id;
-}
-
 // ─────────────────────────── IPC ───────────────────────────
 ipcMain.handle("app:info", () => ({
   version: app.getVersion(),
   feed: currentFeed(),
   defaultFeed: DEFAULT_FEED,
 }));
-ipcMain.handle("device:id", () => getDeviceId());
 ipcMain.handle("updater:check", () => manualCheck());
 ipcMain.handle("updater:restart", () => {
   autoUpdater.quitAndInstall();

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { addChatHistory, retrieveCorpus } from "@/lib/pipeline";
-import { captureToken } from "@/lib/session";
+import { hasOwnKey } from "@/lib/user-config";
 import { deepseekText } from "@/lib/deepseek";
 
 export const runtime = "nodejs";
@@ -8,7 +8,13 @@ export const maxDuration = 120;
 
 /** AI Chat 跨课程问答（借鉴 Otter）：基于已转写课程语料回答复习问题 */
 export async function POST(req: Request) {
-  captureToken(req); // 问答直连 Edge Function，需要本次请求的登录 token
+  // 严格 BYO-Key：未配置用户自有 Key 一律拦截
+  if (!hasOwnKey()) {
+    return NextResponse.json(
+      { error: "请先填入你自己的 DeepSeek API Key（设置 → 导入自己 API）", needApiKey: true },
+      { status: 400 },
+    );
+  }
   const body = (await req.json()) as { question?: string; course?: string };
   const question = (body.question || "").trim().slice(0, 2000);
   if (!question) return NextResponse.json({ error: "请输入问题" }, { status: 400 });

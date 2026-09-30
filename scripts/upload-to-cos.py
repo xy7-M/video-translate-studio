@@ -84,10 +84,21 @@ def main():
         print(f"桶已存在：{args.bucket}")
     except Exception:
         print(f"桶不存在，创建中：{args.bucket}  (region={args.region})")
+        # 安全基线（2026-09-28 事故复盘）：桶保持私有，仅安装包对象单独设公有读；
+        # 开版本控制防误删/覆盖，打防误删标签（cos-python-sdk 该版本一次最多 2 枚 Tag）
         client.create_bucket(Bucket=args.bucket)
-        # 设公有读
-        client.put_bucket_acl(Bucket=args.bucket, ACL="public-read")
-        print("桶已创建并设为公有读")
+        client.put_bucket_versioning(Bucket=args.bucket, Status="Enabled")
+        try:
+            client.put_bucket_tagging(
+                Bucket=args.bucket,
+                Tagging={"TagSet": {"Tag": [
+                    {"Key": "keep", "Value": "donotdelete"},
+                    {"Key": "purpose", "Value": "installer"},
+                ]}},
+            )
+        except Exception as e:
+            print(f"警告：打标签失败（不影响上传）：{e}", file=sys.stderr)
+        print("桶已创建：私有 + 版本控制 + 防误删标签")
 
     # 2) 上传（大文件自动分片）
     key = args.key or installer.name

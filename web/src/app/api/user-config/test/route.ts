@@ -1,6 +1,6 @@
 /**
- * 测试用户自带 DeepSeek API Key 是否可用：用 1 token 的请求探活。
- * 不消耗 Edge Function 配额，不经过 Supabase 代理。
+ * 测试用户自己的 DeepSeek API Key 是否可用：用 1 token 的请求探活。
+ * 直连 DeepSeek，走用户自己的账户额度。
  */
 import { NextResponse } from "next/server";
 import { getUserApiKey } from "@/lib/user-config";

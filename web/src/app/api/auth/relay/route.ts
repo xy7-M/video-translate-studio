@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { setPendingSession, takePendingSession, captureToken } from "@/lib/session";
+import { setPendingSession, takePendingSession } from "@/lib/session";
 
 export const runtime = "nodejs";
 
@@ -9,7 +9,6 @@ export const runtime = "nodejs";
  *  GET  —— 桌面窗口轮询取回 session，写入自身 Supabase 客户端完成登录
  */
 export async function POST(req: Request) {
-  captureToken(req);
   const body = (await req.json().catch(() => ({}))) as { session?: string };
   if (typeof body.session !== "string" || !body.session) {
     return NextResponse.json({ error: "缺少 session" }, { status: 400 });

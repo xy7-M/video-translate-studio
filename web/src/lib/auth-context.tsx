@@ -1,14 +1,14 @@
 "use client";
 
 /**
- * 全局登录态：不再强制整页墙，头部「登录」按钮打开登录卡；
- * 需要花 AI 额度的操作（上传翻译/重跑/问答/翻译）会先检查登录。
- * 同时每 60s 心跳把最新 token 上报本地服务，供后台管线调用 Edge Function。
+ * 全局登录态：未登录时强制弹出注册墙（头部「登录」按钮复用同一卡片）；
+ * 已登录但未配置自有 API Key 时由 OnboardingApiKey 引导，AI 操作前后端双重校验。
  */
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { getSupabase } from "./supabase";
 import AuthCard from "@/components/AuthCard";
+import OnboardingApiKey from "@/components/OnboardingApiKey";
 
 type AuthCtx = {
   session: Session | null;
@@ -29,12 +29,12 @@ export const useAuth = () => useContext(Ctx);
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
-  const [isConfirmPage, setIsConfirmPage] = useState(false);
+  const [isPublicRoute, setIsPublicRoute] = useState(false);
 
   useEffect(() => {
-    // /confirm 是邮箱验证落地页（系统浏览器打开），必须绕过强制注册墙
-    if (window.location.pathname.startsWith("/confirm")) {
-      setIsConfirmPage(true);
+    // /confirm 邮箱验证落地页、/intro 应用内介绍页：均不强制登录
+    if (/^\/(confirm|intro)(\/|$)/.test(window.location.pathname)) {
+      setIsPublicRoute(true);
       setReady(true);
       return;
     }
@@ -54,21 +54,6 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     return () => off();
   }, []);
 
-  // 心跳：supabase-js 会自动续期，轮询即保持后台管线 token 新鲜
-  useEffect(() => {
-    if (!session) return;
-    const push = () => {
-      fetch("/api/auth/ping", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-        body: "{}",
-      }).catch(() => {});
-    };
-    push();
-    const t = setInterval(push, 60000);
-    return () => clearInterval(t);
-  }, [session]);
-
   const signOut = useCallback(async () => {
     const sb = await getSupabase();
     await sb?.auth.signOut();
@@ -78,8 +63,10 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   return (
     <Ctx.Provider value={{ session, ready, openLogin: () => {}, signOut }}>
       {children}
+      {/* 已登录但没有自有 API Key：注册成功后自动弹出，可取消但 AI 操作会拦截并重新唤起 */}
+      <OnboardingApiKey />
       {/* 未登录时强制弹出注册弹窗：无关闭按钮、点遮罩不关闭，注册/登录可切换 */}
-      {ready && !session && !isConfirmPage && (
+      {ready && !session && !isPublicRoute && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto"
           style={{ background: "rgba(28,25,17,0.45)" }}

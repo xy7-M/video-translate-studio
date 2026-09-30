@@ -3,7 +3,6 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("desktop", {
   getInfo: () => ipcRenderer.invoke("app:info"),
-  getDeviceId: () => ipcRenderer.invoke("device:id"),
   checkUpdates: () => ipcRenderer.invoke("updater:check"),
   restartToUpdate: () => ipcRenderer.invoke("updater:restart"),
   setFeedUrl: (url) => ipcRenderer.invoke("updater:set-feed", url),

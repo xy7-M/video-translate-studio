@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
 import { getTask } from "@/lib/pipeline";
-import { captureToken } from "@/lib/session";
 
 export const runtime = "nodejs";
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
-  captureToken(req); // 轮询即心跳：持续刷新后台管线所需的最新 token
+export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const t = getTask(params.id);
   if (!t) return NextResponse.json({ error: "任务不存在" }, { status: 404 });
   return NextResponse.json({

@@ -5,32 +5,22 @@ import {
   Cloud,
   Download,
   FlaskConical,
-  KeyRound,
   RefreshCw,
   Settings,
   Wallet,
   X,
 } from "lucide-react";
 import type { DesktopUpdateStatus } from "@/desktop";
-import { authedFetch } from "@/lib/supabase";
-import { useAuth } from "@/lib/auth-context";
 
 const ic = { size: 15, strokeWidth: 1.75, className: "shrink-0" } as const;
 
-/** 顶部齿轮按钮 + 设置弹窗（AI 服务说明 / 软件许可 / 版本更新） */
+/** 顶部齿轮按钮 + 设置弹窗（AI 服务说明 / 导入自己 API / 版本更新） */
 export default function SettingsModal() {
   const [open, setOpen] = useState(false);
   const [app, setApp] = useState<{ version: string; feed: string } | null>(null);
   const [feedVal, setFeedVal] = useState("");
   const [feedSaved, setFeedSaved] = useState(false);
   const [upd, setUpd] = useState<DesktopUpdateStatus | null>(null);
-  const { session } = useAuth();
-
-  // 软件许可状态：none | active；redeem 反馈
-  const [licStatus, setLicStatus] = useState<"unknown" | "none" | "active">("unknown");
-  const [licCode, setLicCode] = useState("");
-  const [licMsg, setLicMsg] = useState<{ text: string; ok: boolean } | null>(null);
-  const [licBusy, setLicBusy] = useState(false);
 
   // 用户自带 API Key 状态
   const [ownKeyOn, setOwnKeyOn] = useState(false); // 是否已启用自带 Key
@@ -40,17 +30,6 @@ export default function SettingsModal() {
 
   const desktop = typeof window !== "undefined" ? window.desktop : undefined;
 
-  // 取设备指纹：桌面版用硬件摘要；浏览器开发态用固定占位（不影响线上用户）
-  const deviceId = async (): Promise<string> => {
-    try {
-      const id = await desktop?.getDeviceId();
-      if (id && id.length >= 8) return id;
-    } catch {
-      /* fallthrough */
-    }
-    return "browser-dev-0000";
-  };
-
   useEffect(() => {
     if (!open) return;
     desktop?.getInfo().then((i) => {
@@ -58,32 +37,6 @@ export default function SettingsModal() {
       setFeedVal(i.feed || "");
     });
   }, [open, desktop]);
-
-  // 打开设置且已登录时查询许可状态
-  useEffect(() => {
-    if (!open || !session) {
-      if (!session) setLicStatus("none");
-      return;
-    }
-    let dead = false;
-    void (async () => {
-      try {
-        const r = await authedFetch("/api/license", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "state", device: await deviceId() }),
-        });
-        const d = (await r.json()) as { status?: string };
-        if (!dead) setLicStatus(d.status === "active" ? "active" : "none");
-      } catch {
-        if (!dead) setLicStatus("unknown");
-      }
-    })();
-    return () => {
-      dead = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, session]);
 
   // 打开设置时查询自带 Key 状态（不返回 Key 本身）
   useEffect(() => {
@@ -152,27 +105,9 @@ export default function SettingsModal() {
     }
   };
 
-  // 关闭自带 Key 模式（回退到应用共享 Key + 激活码门禁）
-  const disableOwnKey = async () => {
-    setOwnKeyBusy(true);
-    try {
-      await fetch("/api/user-config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "disable" }),
-      });
-      setOwnKeyOn(false);
-      setOwnKeyMsg({ text: "已切回应用共享 AI 服务", ok: true });
-    } catch {
-      setOwnKeyMsg({ text: "网络异常", ok: false });
-    } finally {
-      setOwnKeyBusy(false);
-    }
-  };
-
-  // 彻底清除自带 Key
+  // 彻底清除自带 Key（清除后强制引导会重新弹出）
   const clearOwnKey = async () => {
-    if (!confirm("确认清除自带的 DeepSeek API Key？清除后将回退到应用共享 AI 服务。")) return;
+    if (!confirm("确认清除你保存的 DeepSeek API Key？清除后需要重新填入才能使用 AI 功能。")) return;
     setOwnKeyBusy(true);
     try {
       await fetch("/api/user-config", { method: "DELETE" });
@@ -183,39 +118,6 @@ export default function SettingsModal() {
       setOwnKeyMsg({ text: "网络异常", ok: false });
     } finally {
       setOwnKeyBusy(false);
-    }
-  };
-
-  const redeem = async () => {
-    if (!session) {
-      setLicMsg({ text: "请先登录后再激活", ok: false });
-      return;
-    }
-    const code = licCode.trim().toUpperCase();
-    if (code.length < 8) {
-      setLicMsg({ text: "激活码格式不正确", ok: false });
-      return;
-    }
-    setLicBusy(true);
-    setLicMsg(null);
-    try {
-      const r = await authedFetch("/api/license", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "redeem", code, device: await deviceId() }),
-      });
-      const d = (await r.json()) as { ok?: boolean; error?: string };
-      if (d.ok) {
-        setLicStatus("active");
-        setLicCode("");
-        setLicMsg({ text: "激活成功，感谢支持！", ok: true });
-      } else {
-        setLicMsg({ text: d.error || "激活失败，请稍后重试", ok: false });
-      }
-    } catch {
-      setLicMsg({ text: "网络异常，激活失败", ok: false });
-    } finally {
-      setLicBusy(false);
     }
   };
 
@@ -281,13 +183,16 @@ export default function SettingsModal() {
               <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest inline-flex items-center gap-1.5">
                 <Cloud size={13} strokeWidth={1.75} /> AI 服务
               </p>
-              <p className="text-sm text-[var(--ok)]">
-                {ownKeyOn ? "正在使用你自己的 DeepSeek API Key" : "已连接云端翻译服务 ✓"}
+              <p
+                className="text-sm"
+                style={{ color: ownKeyOn ? "var(--ok)" : "var(--err)" }}
+              >
+                {ownKeyOn ? "正在使用你自己的 DeepSeek API Key" : "尚未配置 API Key，AI 功能不可用"}
               </p>
               <p className="text-xs text-[var(--muted)] leading-relaxed">
                 {ownKeyOn
-                  ? "AI 调用直接走你的 DeepSeek 账户额度，不经应用共享服务。建议在 DeepSeek 平台设置消费上限 100 元。"
-                  : "翻译、标点校对与课堂笔记由登录账号统一提供，无需配置任何 API 密钥。视频转写与全部数据仍保存在本机，视频不出本机。"}
+                  ? "AI 调用直接走你的 DeepSeek 账户额度。建议在 DeepSeek 平台设置消费上限 100 元。"
+                  : "本应用不提供共享 Key：请在下方「导入自己 API」填入你自己的 DeepSeek API Key。视频转写与全部数据仍保存在本机，视频不出本机。"}
               </p>
             </section>
 
@@ -309,8 +214,8 @@ export default function SettingsModal() {
               </div>
 
               <p className="text-xs text-[var(--muted)] leading-relaxed">
-                填入你自己的 DeepSeek API Key，AI 调用（翻译 / 笔记 / 问答）将直接走你的账户额度，
-                不再消耗应用共享配额，也无需激活码。去
+                填入你自己的 DeepSeek API Key，AI 调用（翻译 / 笔记 / 问答）将直接走你的账户额度。
+                本应用不提供共享 Key，请去
                 <a
                   href="https://platform.deepseek.com/api-keys"
                   target="_blank"
@@ -331,13 +236,6 @@ export default function SettingsModal() {
                       disabled={ownKeyBusy}
                     >
                       <FlaskConical {...ic} /> {ownKeyBusy ? "测试中…" : "测试 Key"}
-                    </button>
-                    <button
-                      className="btn-ghost text-xs whitespace-nowrap"
-                      onClick={disableOwnKey}
-                      disabled={ownKeyBusy}
-                    >
-                      切回共享服务
                     </button>
                     <button
                       className="btn-ghost text-xs whitespace-nowrap"
@@ -395,55 +293,6 @@ export default function SettingsModal() {
                 Key 只存在这台电脑的 <code className="mono">user-config.json</code>，
                 不进浏览器 localStorage、不上传任何服务器、不入 git。
               </p>
-            </section>
-
-            {/* 软件许可：激活码兑换 + 设备绑定 */}
-            <section className="space-y-3 border-t border-dashed border-[var(--line)] pt-5">
-              <div className="flex items-center justify-between">
-                <p className="text-xs mono text-[var(--muted)] uppercase tracking-widest inline-flex items-center gap-1.5">
-                  <KeyRound size={13} strokeWidth={1.75} /> 软件许可
-                </p>
-                <span
-                  className="text-[11px] mono px-2 py-0.5 rounded-full"
-                  style={{
-                    border: "1.5px solid var(--line)",
-                    color: licStatus === "active" ? "var(--ok)" : "var(--muted)",
-                  }}
-                >
-                  {licStatus === "active" ? "已激活 · 本设备" : licStatus === "unknown" ? "状态未知" : "未激活"}
-                </span>
-              </div>
-
-              {licStatus === "active" ? (
-                <p className="text-sm text-[var(--ok)]">
-                  已绑定本机与当前账号 ✓ 换电脑请先联系客服解绑。
-                </p>
-              ) : (
-                <>
-                  <p className="text-xs text-[var(--muted)] leading-relaxed">
-                    购买激活码后，在下方输入即可解锁全部 AI 功能。每个激活码绑定一台设备。
-                  </p>
-                  <div className="flex gap-2">
-                    <input
-                      value={licCode}
-                      onChange={(e) => setLicCode(e.target.value.toUpperCase())}
-                      onKeyDown={(e) => e.key === "Enter" && redeem()}
-                      placeholder="如：VTS-XXXX-XXXX-XXXX"
-                      maxLength={40}
-                      aria-label="激活码"
-                      className="flex-1 min-w-0 bg-transparent border border-[var(--line)] rounded-full px-4 py-2 text-sm mono tracking-wider outline-none focus:border-[var(--accent)] transition-colors duration-150"
-                    />
-                    <button className="btn-primary whitespace-nowrap" onClick={redeem} disabled={licBusy}>
-                      {licBusy ? "激活中…" : "激活"}
-                    </button>
-                  </div>
-                  {licMsg && (
-                    <p className="text-xs" style={{ color: licMsg.ok ? "var(--ok)" : "var(--err)" }}>
-                      {licMsg.text}
-                    </p>
-                  )}
-                </>
-              )}
             </section>
 
             {/* 桌面版更新 */}
