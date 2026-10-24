@@ -1,5 +1,6 @@
 /**
- * 测试用户自己的 DeepSeek API Key 是否可用：用 1 token 的请求探活。
+ * 测试用户自己的 DeepSeek API Key 是否可用：小 token 请求探活。
+ * 注意：deepseek-flash 为推理模型，max_tokens 过小会被推理占用导致回复为空，故用 64。
  * 直连 DeepSeek，走用户自己的账户额度。
  */
 import { NextResponse } from "next/server";
@@ -24,7 +25,7 @@ export async function POST() {
       },
       body: JSON.stringify({
         model: DEEPSEEK_MODEL,
-        max_tokens: 8,
+        max_tokens: 64,
         messages: [
           { role: "system", content: "回复两个字：可用" },
           { role: "user", content: "ping" },
