@@ -4,6 +4,7 @@
  */
 import { NextResponse } from "next/server";
 import { getUserApiKey } from "@/lib/user-config";
+import { DEEPSEEK_MODEL } from "@/lib/deepseek";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -22,7 +23,7 @@ export async function POST() {
         Authorization: `Bearer ${key}`,
       },
       body: JSON.stringify({
-        model: "deepseek-chat",
+        model: DEEPSEEK_MODEL,
         max_tokens: 8,
         messages: [
           { role: "system", content: "回复两个字：可用" },

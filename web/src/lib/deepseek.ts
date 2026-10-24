@@ -10,7 +10,7 @@
 import { getUserApiKey } from "./user-config";
 
 const DEEPSEEK_BASE = "https://api.deepseek.com";
-const MODEL = "deepseek-chat";
+export const DEEPSEEK_MODEL = "deepseek-flash"; // DeepSeek-V4.1-Flash-1017（deepseek-chat 旧名仍可用）
 
 /** 用用户自带 Key 直连 DeepSeek */
 async function chat(
@@ -30,7 +30,7 @@ async function chat(
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
     body: JSON.stringify({
-      model: MODEL,
+      model: DEEPSEEK_MODEL,
       temperature,
       ...(json ? { response_format: { type: "json_object" } } : {}),
       messages: [
